@@ -2,8 +2,11 @@
  Spacecraft.js simulates a small spacecraft generating telemetry.
 */
 
-function Spacecraft() {
+function Rover() {
     this.state = {
+        "battery.charge": 100,
+        "battery.temperature": 25,
+        "battery.voltage": 12,
         "prop.fuel": 77,
         "prop.thrusters": "OFF",
         "comms.recd": 0,

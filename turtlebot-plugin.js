@@ -1,6 +1,7 @@
 function getDictionary() {
-    return http.get('/dictionary.json')
+    return http.get('/turtle.json')
         .then(function (result) {
+            console.log(result.data);   
             return result.data;
         });
 }
@@ -12,7 +13,9 @@ var ros = new ROSLIB.Ros({
 // Modified object provider
 var objectProvider = {
     get: function (identifier) {
+        console.log(identifier);
         return getDictionary().then(function (dictionary) {
+            console.log(dictionary.name);
             if (identifier.key === 'turtlebot') {
                 return {
                     identifier: identifier,
@@ -22,8 +25,11 @@ var objectProvider = {
                 };
             } else {
                 var measurement = dictionary.measurements.filter(function (m) {
+                    console.log(m.key);
+                    console.log(identifier.key);
                     return m.key === identifier.key;
                 })[0];
+                console.log(dictionary.measurements);
                 return {
                     identifier: identifier,
                     name: measurement.name,
