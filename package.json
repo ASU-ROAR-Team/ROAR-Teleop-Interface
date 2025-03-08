@@ -1,26 +1,16 @@
 {
-  "name": "openmct-tutorials",
-  "version": "0.0.1",
-  "description": "Tutorials for Open MCT",
-  "main": "example-server/server.js",
+  "name": "rover-monitoring",
+  "version": "1.0.0",
+  "description": "Real-time Rover Monitoring with OpenMCT and ROS",
+  "main": "server.js",
   "scripts": {
-    "start": "node example-server/server.js",
+    "start": "node server.js",
     "clean": "rm -rf node_modules package-lock.json"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nasa/openmct-tutorial.git"
-  },
-  "author": "National Aeronautics and Space Administration",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/nasa/openmct-tutorial/issues"
-  },
-  "homepage": "https://github.com/nasa/openmct-tutorial#readme",
+  "author": "Your Name sofagharably@gmail.com",
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.14.1",
-    "express-ws": "^3.0.0",
-    "openmct": "latest",
-    "ws": "^2.0.3"
+    "express": "^4.17.1",
+    "openmct": "^1.7.5"
   }
 }
