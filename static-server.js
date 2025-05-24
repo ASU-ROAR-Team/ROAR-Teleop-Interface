@@ -8,6 +8,10 @@ function StaticServer() {
     
     // Serve OpenMCT assets from node_modules
     router.use('/node_modules', express.static(__dirname + '/node_modules'));
+// Serve Image assets from images directory
+    router.use('/images', express.static(__dirname + '/images'));
+    // Serve Image assets from images directory
+    
     
     return router;
 }

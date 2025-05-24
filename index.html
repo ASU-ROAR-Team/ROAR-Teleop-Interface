@@ -1,48 +1,69 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Rover Monitoring</title>
-    <script src="node_modules/openmct/dist/openmct.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
-    <script src="turtlebot-plugin.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; }
-    </style>
-    <link rel="icon" href="data:,"> <!-- Empty favicon -->
+  <title>ROS Connection Test</title>
+  <script src="node_modules/openmct/dist/openmct.js"></script>
+  <script src="https://unpkg.com/openmct@4.1.0/dist/plugins/composition/plugin.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
+  <script src="actions/combo-start-plugin.js"></script>
+  <script src="plugins/camera/camera_plugin.js"></script>
+  <script src="plugins/camera/WebcamPlugin.js"></script>
+  <script src="plugins/display/CostmapPlugin.js"></script>
+  <script src="plugins/ZED/ZEDPlugin.js"></script>
+  <!-- <script src="plugins/utils/network_latency.js"></script> -->
+  <!-- <script src="Styling_Plugin.js"></script> -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      openmct.setAssetPath('/node_modules/openmct/dist/');
+      openmct.install(openmct.plugins.LocalStorage());
+      openmct.install(openmct.plugins.MyItems());
+      openmct.install(openmct.plugins.UTCTimeSystem());
+      openmct.install(openmct.plugins.Espresso());
+      openmct.install(openmct.plugins.Notebook());
+      openmct.install(openmct.plugins.Timer());
+      openmct.install(openmct.plugins.LADTable());
+      openmct.install(openmct.plugins.ObjectMigration());
+      openmct.install(
+        openmct.plugins.ClearData(
+          ['table', 'telemetry.plot.overlay', 'telemetry.plot.stacked', 'example.imagery'],
+          { indicator: true }
+        )
+      );
+      openmct.install(openmct.plugins.SummaryWidget());
+      openmct.install(
+        openmct.plugins.DisplayLayout({
+          showAsView: ['summary-widget', 'example.imagery','costmap-map']
+        })
+      );
+
+      openmct.time.clock('local', {start: -15 * 60 * 1000, end: 0});
+      openmct.time.setMode('realtime');
+      openmct.time.timeSystem('utc');
+
+      // Install your custom plugins
+      openmct.install(window.StartComboPlugin());
+      openmct.install(window.CostmapMapPlugin({
+          defaultCostmapSourceUrl: 'http://localhost:8000/costmap.png',
+          defaultPixelOffsetX: 208,
+          defaultPixelOffsetY: 761,
+          defaultPixelsPerMeter: 20.2,
+          checkpointsData: [[7.58, 10.874], [0.211, 9.454], [0.83, 19.867], [6.71, 19.515]],
+          landmarksData: [[-3.43, 9.67], [-0.66, 6.10], [4.96, 11.70], [5.29, 19.04], [13.22, 18.18], [17.54, 9.39], [4.14, 27.16], [11.43, 28.91], [-0.84, 22.44], [10.65, 7.25]],
+          finalGoalData: [11.5439, 17.2415]
+      }));
+      openmct.install(window.CameraPlugin());
+      // openmct.install(window.NetworkLatencyPlugin());
+      openmct.install(window.ZEDPlugin());
+      openmct.install(window.WebcamPlugin());
+      // Install your custom styling plugin
+      // openmct.install(window.MyCustomStylesPlugin());
+
+      openmct.start();
+    });
+  </script>
+  <style>
+  </style>
 </head>
 <body>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            openmct.setAssetPath('/node_modules/openmct/dist/');
-            
-            // Essential plugins
-            openmct.install(openmct.plugins.LocalStorage());
-            openmct.install(openmct.plugins.MyItems());
-            openmct.install(openmct.plugins.UTCTimeSystem());
-            openmct.install(openmct.plugins.Espresso());
-            openmct.install(openmct.plugins.PlanLayout());
-            openmct.install(openmct.plugins.Timeline());
-            // Add to your index.html plugin installations:
-            openmct.install(openmct.plugins.Plot({
-                showAs: ['telemetry.plot.overlay'],
-                plot: {
-                    styles: {
-                        series: {
-                            'linear.x': { color: '#00ff00' },
-                            'angular.z': { color: '#ff0000' }
-                        }
-                    }
-                }
-            }));
-            
-            // Custom Rover plugin
-            openmct.install(TurtlebotPlugin());
-
-            openmct.time.clock('local', {start: -15 * 60 * 1000, end: 0});
-            openmct.time.timeSystem('utc');
-            
-            openmct.start();
-        });
-    </script>
 </body>
 </html>

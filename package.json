@@ -11,6 +11,6 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.17.1",
-    "openmct": "^1.7.5"
+    "openmct": "^4.1.0"
   }
 }
