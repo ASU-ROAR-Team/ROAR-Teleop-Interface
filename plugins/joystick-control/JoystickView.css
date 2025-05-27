@@ -1,0 +1,130 @@
+/* src/plugins/joystick-control/JoystickView.css */
+
+.joystick-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center horizontally */
+    justify-content: center; /* Center vertically */
+    padding: 20px;
+    background-color: #2c2c2c; /* Dark background for the control area */
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    font-family: 'Inter', sans-serif; /* Use Inter font */
+    color: #e0e0e0; /* Light text color */
+    width: 100%; /* Take full width of its parent */
+    height: 100%; /* Take full height of its parent */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    overflow: auto; /* Allow scrolling if content overflows */
+}
+
+.joystick-canvas-wrapper {
+    position: relative;
+    width: 250px; /* Fixed width for the canvas wrapper */
+    height: 250px; /* Fixed height for the canvas wrapper */
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #3a3a3a; /* Slightly lighter background for the canvas area */
+    border-radius: 50%; /* Make it circular */
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+#joystickCanvas {
+    background-color: transparent; /* Canvas background is transparent, wrapper provides color */
+    border: 2px solid #555;
+    border-radius: 50%;
+    cursor: grab;
+    touch-action: none; /* Prevent default touch actions like scrolling/zooming */
+    width: 100%; /* Canvas fills its wrapper */
+    height: 100%; /* Canvas fills its wrapper */
+}
+
+#joystickCanvas:active {
+    cursor: grabbing;
+}
+
+.joystick-status {
+    position: absolute;
+    bottom: -25px; /* Position below the canvas */
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.9em;
+    color: #aaa;
+}
+
+.joystick-status.connected {
+    color: #4CAF50; /* Green for connected */
+}
+
+.joystick-status.error {
+    color: #F44336; /* Red for error */
+}
+
+.speed-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 80%; /* Control width of sliders */
+    max-width: 400px; /* Max width for larger screens */
+}
+
+.speed-slider-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.speed-slider-group label {
+    font-size: 1em;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+.speed-slider-group input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none; /* Override default slider styles */
+    height: 8px;
+    background: #555;
+    outline: none;
+    border-radius: 5px;
+    transition: opacity .2s;
+}
+
+.speed-slider-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #f84632; /* Primary color */
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.speed-slider-group input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #f84632;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.speed-value {
+    font-weight: bold;
+    color: #f84632; /* Accent color */
+    margin-left: 5px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .joystick-canvas-wrapper {
+        width: 200px;
+        height: 200px;
+    }
+    .speed-controls {
+        width: 95%;
+    }
+}
