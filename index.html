@@ -9,6 +9,7 @@
   <script src="plugins/camera/camera_plugin.js"></script>
   <script src="plugins/camera/WebcamPlugin.js"></script>
   <script src="plugins/display/CostmapPlugin.js"></script>
+  <script src="plugins/display/ThemeTogglePlugin.js"></script> 
   <script src="plugins/ZED/ZEDPlugin.js"></script>
   <script src="plugins/mission-control/MissionControlView.js"></script>
   <script src="plugins/mission-control/RoverStatusView.js"></script>
@@ -21,15 +22,13 @@
 
   <link rel="stylesheet" href="plugins/Arm-Control/ArmControlView.css">
 
-  <!-- <script src="plugins/utils/network_latency.js"></script> -->
-  <!-- <script src="Styling_Plugin.js"></script> -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       openmct.setAssetPath('/node_modules/openmct/dist/');
       openmct.install(openmct.plugins.LocalStorage());
       openmct.install(openmct.plugins.MyItems());
       openmct.install(openmct.plugins.UTCTimeSystem());
-      openmct.install(openmct.plugins.Snow());
+      // openmct.install(openmct.plugins.Snow()); // REMOVED: Theme is now installed conditionally below
       openmct.install(openmct.plugins.Notebook());
       openmct.install(openmct.plugins.Timer());
       openmct.install(openmct.plugins.LADTable());
@@ -47,9 +46,31 @@
         })
       );
 
+      // --- Theme Loading Logic ---
+      // Get the preferred theme from localStorage, default to 'snow' (light) if not found.
+      const savedTheme = localStorage.getItem('openmct.theme') || 'snow'; // CHANGED: Default is now 'snow'
+
+      // Install the appropriate theme plugin based on the saved preference.
+      if (savedTheme === 'snow') {
+          openmct.install(openmct.plugins.Snow());
+          console.log('Open MCT started with Snow theme (light mode).');
+      } else {
+          // Default or if savedTheme is 'espresso'
+          openmct.install(openmct.plugins.Espresso());
+          console.log('Open MCT started with Espresso theme (dark mode).');
+      }
+      // --- END Theme Loading Logic ---
+
+      // --- REVERTED: Addressing Deprecation Warnings for Open MCT 4.1.0 ---
+      // Reverting to original methods as 'setClock' and 'setTimeSystem' caused 'start' error.
+      // These will produce deprecation warnings, but should allow the app to run.
       openmct.time.clock('local', {start: -15 * 60 * 1000, end: 0});
       openmct.time.setMode('realtime');
       openmct.time.timeSystem('utc');
+
+      // (If you use clockOffsets or bounds elsewhere, remember to use setClockOffsets and setBounds)
+      // --- END Deprecation Warnings ---
+
 
       // Install your custom plugins
       openmct.install(window.StartComboPlugin());
@@ -69,6 +90,9 @@
       openmct.install(window.JoystickPlugin());
       openmct.install(window.MissionControlPlugin());
       openmct.install(window.ArmControlPlugin());
+      
+      // Install the Theme Toggle Plugin
+      openmct.install(window.ThemeToggleObjectPlugin()); // <--- IMPORTANT: Ensure this line is present and correct
 
       // Install your custom styling plugin
       // openmct.install(window.MyCustomStylesPlugin());
