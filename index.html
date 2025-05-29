@@ -12,10 +12,15 @@
   <script src="plugins/ZED/ZEDPlugin.js"></script>
   <script src="plugins/mission-control/MissionControlView.js"></script>
   <script src="plugins/mission-control/RoverStatusView.js"></script>
- <script src="plugins/joystick-control/JoystickView.js"></script>
+  <script src="plugins/joystick-control/JoystickView.js"></script>
+  <script src="plugins/Arm-Control/ArmControlView.js"></script>
 
-    <script src="plugins/mission-control/plugin.js"></script>
-    <script src="plugins/joystick-control/plugin.js"></script>
+  <script src="plugins/mission-control/plugin.js"></script>
+  <script src="plugins/joystick-control/plugin.js"></script>
+  <script src="plugins/Arm-Control/plugin.js"></script>
+
+  <link rel="stylesheet" href="plugins/Arm-Control/ArmControlView.css">
+
   <!-- <script src="plugins/utils/network_latency.js"></script> -->
   <!-- <script src="Styling_Plugin.js"></script> -->
   <script>
@@ -63,6 +68,7 @@
       openmct.install(window.WebcamPlugin());
       openmct.install(window.JoystickPlugin());
       openmct.install(window.MissionControlPlugin());
+      openmct.install(window.ArmControlPlugin());
 
       // Install your custom styling plugin
       // openmct.install(window.MyCustomStylesPlugin());
