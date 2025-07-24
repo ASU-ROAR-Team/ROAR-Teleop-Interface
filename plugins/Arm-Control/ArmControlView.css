@@ -1,238 +1,310 @@
 /* src/plugins/Arm-Control/ArmControlView.css */
 
 /* Main container for the entire arm control interface */
-.arm-control-container {
+.arm-robot-control-container {
     display: flex;
-    flex-direction: column; /* Stacks children vertically (joysticks-wrapper and controls-section) */
+    flex-direction: column;
     align-items: center; /* Centers items horizontally within this container */
     justify-content: flex-start;
-    padding: 5px; /* Reduced from 10px: Less padding around the entire interface */
-    background-color: #2c2c2c; /* Dark background */
-    border-radius: 10px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    font-family: 'Inter', sans-serif;
-    color: #e0e0e0; /* Light text color */
-    height: 350px; /* Take full height of its parent */
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    padding: 4px; /* A little more padding for overall container */
+    background-color: var(--background-color--lvl3); /* Theme-aware */
+    border-radius: 8px;
+    box-shadow: var(--shadow-small); /* Theme-aware */
+    font-family: Arial, sans-serif;
+    color: var(--color-text); /* Theme-aware */
+    height: 100%; /* Take full height of its parent */
+    width: 100%; /* Take full width of its parent */
+    box-sizing: border-box;
     overflow: auto; /* Add scrollbars if content overflows */
-    gap: 5px; /* Reduced from 10px: Less vertical space between sections */
-    width: 350px; /* CRITICAL CHANGE: Set a fixed width for the entire panel (e.g., 200px for two 90px joysticks + gap + padding) */
-    margin-left: 5px; /* Add a small margin from the left edge of the page */
-    margin-right: auto; /* Push the entire panel to the left, consuming remaining space on the right */
+    gap: 4px; /* Consistent gap between main sections */
+    font-size: 0.9em;
 }
 
-/* Wrapper for the two joysticks to arrange them side-by-side */
-.joysticks-wrapper {
+/* Wrapper for the joysticks to arrange them side-by-side */
+.arm-robot-control-container .joysticks-wrapper {
     display: flex; /* Enables flexbox for children (joystick-group) */
     flex-wrap: wrap; /* Allows joysticks to wrap to the next line if not enough space */
-    gap: 15px; /* Reduced from 10px: LESS HORIZONTAL SPACE BETWEEN THE TWO JOYSTICK GROUPS */
+    gap: 6px; /* Space between joysticks */
     justify-content: center; /* Centers joysticks if there's extra space */
-    margin-bottom: 5px; /* Reduced from 10px: Less space below the joystick area */
-    width: fit-content; /* This helps collapse the wrapper to its content's size */
+    margin-bottom: 4px; /* Small space below joysticks */
+    /* REMOVED: max-width: 100%; and flex-grow: 1; as they could cause expansion issues */
+    /* Instead, we'll let the content dictate wrapper width */
 }
 
 /* Individual container for each joystick (canvas + label) */
-.joystick-group {
+.arm-robot-control-container .joystick-group {
     display: flex;
-    flex-direction: column; /* Stacks canvas and label vertically */
-    align-items: center; /* Centers canvas and label horizontally */
-    gap: 2px; /* Reduced from 5px: LESS SPACE BETWEEN THE JOYSTICK CANVAS AND ITS LABEL */
-    width: 90px; /* CRITICAL CHANGE: Increased width for larger joysticks */
-    /* Ensure it doesn't flex-grow */
-    flex-shrink: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px; /* Small gap between joystick canvas and its label */
+    width: 80px; /* Fixed width for each joystick group */
+    flex-shrink: 0; /* Prevents joysticks from shrinking below 80px */
     flex-grow: 0;
+    box-sizing: border-box; /* Ensures padding/border are included in the 80px width */
 }
 
 /* Wrapper specifically for the joystick canvas to define its size and appearance */
-.joystick-canvas-wrapper {
+.arm-robot-control-container .joystick-canvas-wrapper {
     position: relative;
-    width: 90px; /* CRITICAL CHANGE: Increased size for the circular joystick base */
-    height: 90px; /* CRITICAL CHANGE: Increased size for the circular joystick base */
+    width: 80px; /* Fixed width for joystick */
+    height: 80px; /* Fixed height for joystick */
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #3a3a3a; /* Darker background for the base */
-    border-radius: 50%; /* Makes it a perfect circle */
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
-    overflow: hidden; /* Ensure overflow is hidden to strictly contain the circle */
+    background-color: var(--background-color--lvl2); /* Theme-aware */
+    border-radius: 50%;
+    box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
 }
 
 /* The canvas element itself where the joystick is drawn */
-.joystick-canvas {
-    background-color: transparent; /* No background, wrapper handles it */
-    border: 2px solid #555; /* Light grey border for the base circle */
-    border-radius: 50%; /* Makes it a perfect circle */
-    touch-action: none; /* Prevents default touch actions like scrolling/zooming */
-    width: 100%; /* Canvas fills its wrapper */
-    height: 100%; /* Canvas fills its wrapper */
+.arm-robot-control-container .joystick-canvas {
+    background-color: transparent;
+    border: 1px solid var(--border-color--light); /* Theme-aware */
+    border-radius: 50%;
+    touch-action: none;
+    width: 100%; /* Canvas takes 100% of its wrapper (80px) */
+    height: 100%; /* Canvas takes 100% of its wrapper (80px) */
+    cursor: grab;
 }
 
-/* Cursor when actively dragging - this rule is still useful for visual feedback */
-.joystick-canvas:active {
+.arm-robot-control-container .joystick-canvas:active {
     cursor: grabbing;
 }
 
-/* Status text (now a regular block element, centered below both joysticks) */
-.joystick-status {
-    text-align: center; /* Center the text horizontally within its new flow */
-    margin-top: 5px; /* Add some space above it */
-    margin-bottom: 5px; /* Add some space below it */
-    font-size: 0.65em;
-    color: #aaa;
-    white-space: nowrap; /* Ensures text stays on one line */
-}
-
-.joystick-status.connected {
-    color: #4CAF50; /* Green for connected status */
-}
-
-.joystick-status.error {
-    color: #F44336; /* Red for error status */
-}
-
-/* NEW: Style for the overall joystick functionality label */
-.joystick-overall-label {
+/* Status text (e.g., "Connected to ROS") */
+.arm-robot-control-container .joystick-status {
     text-align: center;
-    font-size: 0.7em; /* Slightly smaller than status, but readable */
-    color: #e0e0e0; /* Light text color, similar to general text */
-    margin-top: 5px; /* Small space above it */
-    margin-bottom: 5px; /* Small space below it */
-    padding: 2px 5px; /* A little padding */
-    background-color: #3a3a3a; /* Darker background for distinction */
-    border-radius: 4px; /* Slightly rounded corners */
-    width: 95%; /* Match width of other central blocks */
-    max-width: 300px; /* Match max-width of slider section for alignment */
-    white-space: nowrap; /* Ensures text stays on one line */
+    margin-top: 2px; /* Very small margin above "Connected to ROS" */
+    margin-bottom: 2px; /* Very small margin below "Connected to ROS" */
+    font-size: 0.8em;
+    color: var(--color-text--light); /* Theme-aware */
+    white-space: nowrap; /* Keep it on one line if possible */
 }
 
-/* Section for the Max Velocity slider (renamed from .controls-section) */
-.velocity-slider-section { /* Renamed from .controls-section */
+.arm-robot-control-container .joystick-status.connected {
+    color: var(--color-success); /* Theme-aware */
+}
+
+.arm-robot-control-container .joystick-status.error {
+    color: var(--color-error); /* Theme-aware */
+}
+
+/* Style for the overall joystick functionality label */
+.arm-robot-control-container .joystick-overall-label {
+    text-align: center;
+    font-size: 0.9em;
+    color: var(--color-text); /* Theme-aware */
+    margin-top: 2px; /* Reduced from 4px, small gap from status */
+    margin-bottom: 6px; /* A bit more space below the label before next section */
+    padding: 2px 4px;
+    background-color: var(--background-color--lvl2); /* Theme-aware */
+    border-radius: 4px;
+    width: calc(100% - 8px); /* Adjust for its own padding */
+    max-width: 350px; /* Limit max width of the label to prevent it from getting too wide */
+    white-space: normal; /* Allow text to wrap naturally */
+    box-shadow: var(--shadow-small); /* Theme-aware */
+}
+
+/* Heading for "Current Joint Velocities" */
+.arm-robot-control-container .joint-velocities-header {
+    font-size: 1em;
+    margin-bottom: 4px; /* Small space below header */
+    margin-top: 6px; /* Small space above header */
+    color: var(--color-text); /* Theme-aware */
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* Container for displaying individual joint velocity values */
+.arm-robot-control-container .joint-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px; /* Space between joint values */
+    justify-content: center;
+    margin-top: 2px; /* Small space above joint values display */
+    font-size: 0.85em;
+    width: 95%; /* Flexible width */
+    max-width: 350px; /* Limit max width */
+    background-color: var(--background-color--lvl2); /* Theme-aware */
+    padding: 6px; /* Internal padding */
+    border-radius: 6px;
+    box-shadow: var(--shadow-small); /* Theme-aware */
+    margin-bottom: 4px; /* Small space below joint values display */
+}
+
+/* Individual span for each joint's velocity display */
+.arm-robot-control-container .joint-value {
+    background-color: var(--background-color--lvl1); /* Theme-aware */
+    padding: 3px 6px;
+    border-radius: 4px;
+    color: var(--color-success); /* Theme-aware */
+    min-width: 70px;
+    text-align: center;
+    white-space: nowrap;
+    border: 1px solid var(--border-color--dark); /* Theme-aware */
+}
+
+/* Styling for zero velocity values */
+.arm-robot-control-container .joint-value.zero {
+    color: var(--color-text--light); /* Theme-aware */
+}
+
+/* Section for the Max Velocity slider */
+.arm-robot-control-container .velocity-slider-section {
     display: flex;
     flex-direction: column;
-    gap: 10px; /* Reduced vertical space between elements in this section */
-    width: 95%; /* Adjusted width */
-    max-width: 300px; /* Reduced maximum width for this section */
-    background-color: #3a3a3a; /* Darker background */
-    padding: 10px; /* Reduced padding */
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-    margin-top: 5px; /* Add some space above this section */
+    gap: 6px; /* Space between elements in slider section */
+    width: 95%; /* Flexible width */
+    max-width: 300px; /* Limit max width */
+    background-color: var(--background-color--lvl2); /* Theme-aware */
+    padding: 6px; /* Internal padding */
+    border-radius: 6px;
+    box-shadow: var(--shadow-small); /* Theme-aware */
+    margin-top: 6px; /* Space above slider section */
 }
 
 /* Group for the velocity slider and its label/value */
-.velocity-control-group {
+.arm-robot-control-container .velocity-control-group {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px; /* Reduced space between label and slider */
+    gap: 2px; /* Small gap within slider group */
 }
 
-.velocity-control-group label {
-    font-size: 0.9em; /* Reduced font size for label */
+.arm-robot-control-container .velocity-control-group label {
+    font-size: 0.9em;
     font-weight: bold;
-    color: #e0e0e0;
-    white-space: nowrap; /* Ensures text stays on one line */
+    color: var(--color-text); /* Theme-aware */
+    white-space: nowrap;
 }
 
 /* Styling for the range input (slider) */
-.velocity-control-group input[type="range"] {
+.arm-robot-control-container .velocity-control-group input[type="range"] {
     width: 100%;
-    -webkit-appearance: none; /* Remove default WebKit appearance */
-    height: 5px; /* Reduced height of the slider track */
-    background: #555; /* Slider track color */
+    -webkit-appearance: none;
+    height: 6px;
+    background: var(--border-color--dark); /* Theme-aware */
     outline: none;
     border-radius: 3px;
     transition: opacity .2s;
 }
 
 /* Styling for the slider thumb (the draggable part) */
-.velocity-control-group input[type="range"]::-webkit-slider-thumb {
+.arm-robot-control-container .velocity-control-group input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px; /* Reduced thumb size */
-    height: 14px; /* Reduced thumb size */
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    background: #f84632; /* Red thumb color */
+    background: #f84632; /* Accent color - fixed */
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-small); /* Theme-aware */
 }
 
-.velocity-control-group input[type="range"]::-moz-range-thumb {
-    width: 14px; /* Reduced thumb size for Firefox */
-    height: 14px; /* Reduced thumb size for Firefox */
+.arm-robot-control-container .velocity-control-group input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #f84632;
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-small);
 }
 
 /* Styling for the displayed velocity value */
-.velocity-value {
+.arm-robot-control-container .velocity-value {
     font-weight: bold;
-    color: #f84632;
+    color: #f84632; /* Accent color - fixed */
     margin-left: 5px;
-    font-size: 0.9em; /* Reduced font size */
-    white-space: nowrap; /* Ensures text stays on one line */
+    font-size: 0.9em;
+    white-space: nowrap;
 }
 
-/* Heading for "Current Joint Velocities" (now a standalone element) */
-h3 {
-    font-size: 1em; /* Reduced heading size */
-    margin-bottom: 5px;
-    margin-top: 0; /* No top margin as it follows other elements */
-    white-space: nowrap; /* Ensures text stays on one line */
-}
-
-/* Container for displaying individual joint velocity values (now a standalone element) */
-.joint-display {
-    display: flex;
-    flex-wrap: wrap; /* Allows joint values to wrap if space is limited */
-    gap: 8px; /* Reduced space between joint value spans */
-    justify-content: center;
-    margin-top: 5px; /* Add some space above it */
-    font-size: 0.8em; /* Reduced font size for joint values */
-    width: 95%; /* Give it a width to center content */
-    max-width: 350px; /* Match max-width of slider section for alignment */
-}
-
-/* Individual span for each joint's velocity display */
-.joint-value {
-    background-color: #444; /* Darker background for each value box */
-    padding: 4px 8px; /* Reduced padding */
-    border-radius: 4px;
-    color: #4CAF50; /* Green color for active values */
-    min-width: 70px; /* Reduced minimum width for value boxes */
-    text-align: center;
-    white-space: nowrap; /* Ensures text stays on one line */
-}
-
-/* Styling for zero velocity values */
-.joint-value.zero {
-    color: #aaa; /* Grey color for zero values */
-}
-
-/* Media query for smaller screens (e.g., mobile) - ensures layout is still reasonable */
+/* Media queries for smaller screens - adjusted to reflect new base spacing */
 @media (max-width: 768px) {
-    .joystick-canvas-wrapper {
-        width: 90px; /* Keep consistent with desktop */
-        height: 90px;
+    .arm-robot-control-container .joystick-canvas-wrapper {
+        width: 60px;
+        height: 60px;
     }
-    .joystick-group {
-        width: 90px; /* Keep consistent with desktop */
+    .arm-robot-control-container .joystick-group {
+        width: 60px;
+        gap: 1px;
     }
-    .joysticks-wrapper {
-        flex-direction: row; /* Forces row on small screens if possible */
-        flex-wrap: wrap; /* Keep wrap to allow stacking if space is EXTREMELY limited */
-        gap: 5px; /* Keep consistent with desktop */
+    .arm-robot-control-container .joysticks-wrapper {
+        gap: 4px;
     }
-    .velocity-slider-section, /* Apply to the new section name */
-    .joint-display, /* Apply to the now independent joint display */
-    .joystick-overall-label { /* Apply to the new overall label */
-        width: 95%; /* Adjust width for small screens */
+    .arm-robot-control-container .joystick-overall-label {
+        width: calc(100% - 6px); /* Adjusted for new smaller padding */
+        padding: 1px 3px;
+        font-size: 0.8em;
     }
-    .arm-control-container {
-        width: 100%; /* Allow full width on small screens */
-        margin-left: 0; /* Remove fixed margin on small screens */
-        margin-right: 0;
+    .arm-robot-control-container {
+        padding: 3px;
+        font-size: 0.85em;
+    }
+    .arm-robot-control-container .velocity-control-group label,
+    .arm-robot-control-container .velocity-value,
+    .arm-robot-control-container .joystick-status {
+        font-size: 0.8em;
+    }
+    .arm-robot-control-container .joint-velocities-header {
+        font-size: 0.9em;
+    }
+    .arm-robot-control-container .joint-value {
+        font-size: 0.75em;
+        padding: 2px 4px;
+        min-width: 50px;
+    }
+    .arm-robot-control-container .joystick-status,
+    .arm-robot-control-container .joystick-overall-label {
+        margin-top: 1px;
+        margin-bottom: 3px; /* Slightly more space below the label */
+    }
+    .arm-robot-control-container .joint-velocities-header {
+        margin-top: 3px;
+        margin-bottom: 2px;
+    }
+    .arm-robot-control-container .joint-display {
+        margin-top: 1px;
+        margin-bottom: 2px;
+        padding: 4px;
+    }
+    .arm-robot-control-container .velocity-slider-section {
+        margin-top: 3px;
+        padding: 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    .arm-robot-control-container .joystick-canvas-wrapper {
+        width: 50px;
+        height: 50px;
+    }
+    .arm-robot-control-container .joystick-group {
+        width: 50px;
+    }
+    .arm-robot-control-container .joysticks-wrapper {
+        gap: 3px;
+    }
+    .arm-robot-control-container .velocity-slider-section,
+    .arm-robot-control-container .joint-display,
+    .arm-robot-control-container .joystick-overall-label {
+        max-width: 180px;
+    }
+    .arm-robot-control-container {
+        font-size: 0.8em;
+        padding: 1px;
+    }
+    .arm-robot-control-container .joystick-overall-label {
+        width: calc(100% - 4px); /* Adjusted for new smaller padding */
+        padding: 0px 2px;
+    }
+    .arm-robot-control-container .joint-value {
+        min-width: 45px;
+    }
+    .arm-robot-control-container .joystick-status,
+    .arm-robot-control-container .joystick-overall-label {
+        margin-top: 0px; /* Minimal margin */
+        margin-bottom: 2px; /* Very small space below the label */
     }
 }

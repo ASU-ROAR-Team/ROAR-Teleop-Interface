@@ -46,16 +46,11 @@ window.CostmapMapPlugin = function CostmapMapPlugin(options) {
                 domainObject.pixelsPerMeter = options?.defaultPixelsPerMeter || 20.2; // Scaling factor (pixels per meter)
 
                 // Properties for Checkpoints and Final Goal
-                // Corrected default values to be empty arrays/null instead of JSON strings
-                // These defaults are used when a *new* object is created via the UI.
                 domainObject.checkpointsData = options?.checkpointsData || []; // Default to empty array
                 domainObject.finalGoalData = options?.finalGoalData || null; // Default to null for a single point
 
-                // --- NEW: Property for Landmarks ---
-                // Store landmarks as a JSON array of [x, y] tuples
-                // Corrected default value to be an empty array instead of a JSON string
+                // Property for Landmarks
                 domainObject.landmarksData = options?.landmarksData || []; // Default to empty array
-                // --- End NEW ---
             },
             form: [
                 {
@@ -101,7 +96,7 @@ window.CostmapMapPlugin = function CostmapMapPlugin(options) {
                      required: false,
                      cssClass: 'l-input'
                  },
-                 // --- NEW: Form field for Landmarks ---
+                 // Form field for Landmarks
                  {
                      key: 'landmarksData',
                      name: 'Landmarks (JSON array of [x, y])',
@@ -109,7 +104,6 @@ window.CostmapMapPlugin = function CostmapMapPlugin(options) {
                      required: false,
                      cssClass: 'l-input'
                  }
-                 // --- End NEW ---
             ]
         });
         // --- End Define new object type ---
@@ -186,35 +180,35 @@ class CostmapMapComponent {
         this.traversedPathTopic = null;
         this.lookaheadTopic = null;
         this.obstaclesTopic = null;
-        // Removed: this.checkpointsTopic = null; // Checkpoints are static from properties now
-        // Removed: this.landmarksTopic = null; // Landmarks are static from properties now
 
-        // Data storage for visualization elements
+        // Data storage for visualization elements (will be cleared on ROS disconnect)
         this.robotPosition = null; // {x, y, theta}
         this.globalPath = [];      // [{x, y}]
         this.traversedPath = [];   // [{x, y}]
         this.lookaheadPoint = null; // {x, y}
         this.obstacles = new Map(); // Map<obstacle_id, {x, y, radius}>
 
-        // Checkpoints and Final Goal from properties
-        // Revised: Process data, handling potential string format from form input
+        // Checkpoints and Final Goal from properties (static, not cleared on ROS disconnect)
         this.checkpoints = this.processCheckpointsData(this.domainObject.checkpointsData);
         this.finalGoal = this.processFinalGoalData(this.domainObject.finalGoalData);
-
-        // --- NEW: Landmarks from properties ---
-        // Revised: Process data, handling potential string format from form input
         this.landmarks = this.processLandmarksData(this.domainObject.landmarksData);
-        // --- End NEW ---
-
 
         // Bind event handlers
         this.resizeHandler = this.handleResize.bind(this);
 
-        // Variables for browser-side rate limiting
-        this.lastProcessedPoseTime = 0; // Timestamp of the last pose message *processed* for drawing
-        this.minProcessingIntervalMs = 33; // Adjust this value as needed for desired smoothness vs. responsiveness
+        // Variables for browser-side rate limiting for pose updates
+        this.lastProcessedPoseTime = 0;
+        this.minProcessingIntervalMs = 33; // ~30 fps
 
-        // *** ADDED CONSOLE LOGS FOR INITIAL DATA ***
+        // Timestamps for data staleness check
+        this.lastRobotPoseReceiveTime = 0;
+        this.lastGlobalPathReceiveTime = 0;
+        this.lastTraversedPathReceiveTime = 0;
+        this.lastObstaclesReceiveTime = 0;
+        this.dataStaleTimeoutMs = 2000; // 2 seconds threshold for data to be considered stale (adjust as needed)
+
+        // The animation frame ID for the continuous drawing loop
+        this.animationFrameId = null;
     }
 
     // --- Methods to process data from properties (handling potential JSON strings) ---
@@ -230,7 +224,6 @@ class CostmapMapComponent {
         } else if (Array.isArray(data)) {
              processedData = data;
         } else {
-            console.warn('Map: Checkpoints data is not a string or array, or is null/undefined.', data);
             return []; // Return empty array if data is not string or array
         }
 
@@ -258,10 +251,8 @@ class CostmapMapComponent {
               return null; // Explicitly return null if input is null/undefined
          }
          else {
-             console.warn('Map: Final goal data is not a string or array, or is invalid format.', data);
              return null; // Return null if data is not string or array or invalid format
          }
-
 
          // Basic validation: check if it's an array with 2 numbers
          if (Array.isArray(processedData) && processedData.length === 2 && typeof processedData[0] === 'number' && typeof processedData[1] === 'number') {
@@ -272,7 +263,6 @@ class CostmapMapComponent {
          }
     }
 
-    // --- NEW: Method to process Landmarks data from properties (handling potential JSON strings) ---
     processLandmarksData(data) {
         let processedData = [];
         if (typeof data === 'string') {
@@ -285,7 +275,6 @@ class CostmapMapComponent {
         } else if (Array.isArray(data)) {
             processedData = data;
         } else {
-             console.warn('Map: Landmarks data is not a string or array, or is null/undefined.', data);
              return []; // Return empty array if data is not string or array
         }
 
@@ -297,8 +286,6 @@ class CostmapMapComponent {
             return []; // Return empty array on invalid format
         }
     }
-    // --- End NEW ---
-
 
     render() {
         this.canvas = document.createElement('canvas');
@@ -326,45 +313,56 @@ class CostmapMapComponent {
              }
         }
 
-
         // Setup ROS connection and subscribers
         this.setupRos();
 
-        // Initial draw (might show loading message)
-        this.drawMap();
+        // Set up a periodic drawing and staleness check loop
+        this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
+    }
+
+    animate() {
+        this.checkStaleData(); // Check if any data has gone stale
+        this.drawMap();        // Redraw the map (this will only draw if data is present and not stale)
+        this.animationFrameId = requestAnimationFrame(this.animate.bind(this)); // Request next frame
     }
 
     handleResize() {
         // Adjust canvas drawing buffer size to match display size
         const rect = this.canvas.parentElement.getBoundingClientRect();
         this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
+        // Maintain aspect ratio if map dimensions are known
+        if (this.mapWidthPixels > 0 && this.mapHeightPixels > 0) {
+            this.canvas.height = rect.width * (this.mapHeightPixels / this.mapWidthPixels);
+            if (this.canvas.height > rect.height) { // If calculated height exceeds parent's height, scale by height
+                this.canvas.height = rect.height;
+                this.canvas.width = rect.height * (this.mapWidthPixels / this.mapHeightPixels);
+            }
+        } else {
+            this.canvas.height = rect.height; // Fallback to parent height if map dimensions unknown
+        }
 
         // Redraw the map after resizing
         this.drawMap();
     }
 
-    // --- Method to load Costmap Image (if source is PNG/JPG) ---
     loadCostmapImage() {
         this.costmapImage = new Image();
-        this.costmapImage.src = '/images/costmap.png'
+        this.costmapImage.src = this.domainObject.costmapSourceUrl; // Use URL from properties
         this.costmapImage.onload = () => {
             this.mapWidthPixels = this.costmapImage.width;
             this.mapHeightPixels = this.costmapImage.height;
-            this.drawMap(); // Redraw once image is loaded
+            this.handleResize(); // Recalculate canvas dimensions and redraw
         };
         this.costmapImage.onerror = (error) => {
-            console.error('Map: Error loading costmap image:', error);
+            console.error('Map: Error loading costmap image:', error, this.domainObject.costmapSourceUrl);
             if (this.ctx) {
                 this.ctx.fillStyle = 'red';
                 this.ctx.font = '20px Arial';
-                this.ctx.fillText('Error loading map image.', 10, 30);
+                this.ctx.fillText(`Error loading map image: ${this.domainObject.costmapSourceUrl}`, 10, 30);
             }
         };
-        ;
     }
 
-    // --- Method to load and parse Costmap CSV (if source is CSV) ---
     async loadCostmapData(csvUrl) {
         try {
             const response = await fetch(csvUrl);
@@ -394,22 +392,17 @@ class CostmapMapComponent {
                  return;
             }
 
-            // Find min/max cost for normalization (INCLUDING -1 if present, as per original request)
+            // Find min/max cost for normalization
             this.minCost = Infinity;
             this.maxCost = -Infinity;
             for (const row of this.costmapData) {
                  for (const value of row) {
-                     // Include all values in min/max calculation
                      if (value < this.minCost) this.minCost = value;
                      if (value > this.maxCost) this.maxCost = value;
                  }
             }
 
-
-            // The coordinate transformation constants (pixelOffsetX, pixelOffsetY, pixelsPerMeter)
-            // are loaded from domainObject properties in the constructor.
-
-            this.drawMap(); // Redraw once data is loaded
+            this.handleResize(); // Recalculate canvas dimensions and redraw
 
         } catch (error) {
             console.error('Map: Error loading or parsing costmap CSV:', error);
@@ -421,48 +414,37 @@ class CostmapMapComponent {
         }
     }
 
-    // --- Modified Function to get color from cost value (removed -1 handling) ---
+    // Function to get color from cost value
     getCostColor(costValue) {
         // Handle case where min and max cost are the same or invalid range
         if (this.maxCost <= this.minCost) {
              // If all valid costs are the same or range is invalid, return a mid-gray
-             // For -1 specifically, we might want a distinct color if not included in range
              if (costValue === -1) {
-                return 'rgba(100, 100, 100, 0.5)'; // Semi-transparent gray for -1
+                return 'rgba(100, 100, 100, 0.5)'; // Semi-transparent gray for -1 (unknown/unoccupied)
              }
-             return 'rgb(128, 128, 128)'; // Mid-gray for other cases
+             return 'rgb(128, 128, 128)'; // Mid-gray for other cases (e.g., all costs are 0)
         }
 
-        // Normalize cost to 0-1 range based on the min/max of all costs (excluding -1 for normalization range if desired)
-        // However, your original code included -1 in min/max, so keeping that.
+        // Normalize cost to 0-1 range
         const normalizedCost = (costValue - this.minCost) / (this.maxCost - this.minCost);
 
-        // --- Implement a simple colormap (Blue to Red) ---
-        // This maps 0-1 normalized cost to a color gradient.
-         const r = Math.floor(normalizedCost * 255); // Red increases with cost
-         const g = 0;
-         const b = Math.floor((1 - normalizedCost) * 255); // Blue decreases with cost
+        // Implement a simple colormap (Blue for low cost to Red for high cost)
+        const r = Math.floor(normalizedCost * 255); // Red increases with cost
+        const g = 0; // Green is zero for pure blue-red gradient
+        const b = Math.floor((1 - normalizedCost) * 255); // Blue decreases with cost
 
-        return `rgb(${r}, ${g}, ${b})`; // Return the color string
-        // --- End Modified ---
+        return `rgb(${r}, ${g}, ${b})`;
     }
-    // --- End Modified Function ---
-
 
     // --- Coordinate Transformation Functions (Based on your Python logic) ---
     // These functions convert real-world ROS coordinates (meters) to pixel coordinates
     // relative to the top-left of the costmap data/image, using your constants.
     realToPixelX(realX) {
-        // Python: int(208 + 20.2 * x)
-        // JavaScript: pixelX = pixelOffsetX + pixelsPerMeter * realX
         return this.pixelOffsetX + this.pixelsPerMeter * realX;
     }
 
     realToPixelY(realY) {
-        // Python: int(761 - 20.2 * y)
-        // JavaScript: pixelY = pixelOffsetY - pixelsPerMeter * realY
-        // This matches your Python logic exactly.
-        return this.pixelOffsetY - this.pixelsPerMeter * realY;
+        return this.pixelOffsetY - this.pixelsPerMeter * realY; // Subtract because canvas Y is inverted
     }
 
     // --- Drawing Function ---
@@ -476,11 +458,10 @@ class CostmapMapComponent {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Determine scaling factors from costmap dimensions to current canvas size
-        // Use 1 as a fallback if map dimensions are not yet determined
         const scaleX = this.mapWidthPixels > 0 ? this.canvas.width / this.mapWidthPixels : 1;
         const scaleY = this.mapHeightPixels > 0 ? this.canvas.height / this.mapHeightPixels : 1;
 
-        // Use the smaller scale factor for marker size scaling to avoid distortion
+        // For markers, use the smaller scale factor to maintain relative proportion on the map
         const markerScale = Math.min(scaleX, scaleY);
 
 
@@ -493,7 +474,6 @@ class CostmapMapComponent {
             for (let y = 0; y < this.mapHeightPixels; y++) {
                 for (let x = 0; x < this.mapWidthPixels; x++) {
                     const cost = this.costmapData[y][x];
-                    // Use the modified getCostColor function
                     const color = this.getCostColor(cost);
                     this.ctx.fillStyle = color;
                     // Draw a rectangle for each pixel, scaled to the canvas size
@@ -506,23 +486,20 @@ class CostmapMapComponent {
              this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
              this.ctx.fillStyle = 'white';
              this.ctx.font = '20px Arial';
-             this.ctx.fillText('Loading map data...', 10, 30);
+             this.ctx.fillText('Loading map data or URL not set...', 10, 30);
         }
 
         // --- Draw other elements (convert ROS coords to pixel coords and scale) ---
-
         // Draw Global Path
         if (this.globalPath.length > 1) {
             this.ctx.strokeStyle = 'yellow';
             this.ctx.lineWidth = 2;
             this.ctx.beginPath();
-            // Convert the first point to pixel coordinates and scale
             const startPixel = {
                 x: this.realToPixelX(this.globalPath[0].x) * scaleX,
                 y: this.realToPixelY(this.globalPath[0].y) * scaleY
             };
             this.ctx.moveTo(startPixel.x, startPixel.y);
-            // Convert subsequent points and draw lines
             for (let i = 1; i < this.globalPath.length; i++) {
                 const nextPixel = {
                     x: this.realToPixelX(this.globalPath[i].x) * scaleX,
@@ -538,13 +515,11 @@ class CostmapMapComponent {
              this.ctx.strokeStyle = 'blue';
              this.ctx.lineWidth = 2;
              this.ctx.beginPath();
-             // Convert the first point to pixel coordinates and scale
              const startPixel = {
                  x: this.realToPixelX(this.traversedPath[0].x) * scaleX,
                  y: this.realToPixelY(this.traversedPath[0].y) * scaleY
              };
              this.ctx.moveTo(startPixel.x, startPixel.y);
-             // Convert subsequent points and draw lines
              for (let i = 1; i < this.traversedPath.length; i++) {
                  const nextPixel = {
                      x: this.realToPixelX(this.traversedPath[i].x) * scaleX,
@@ -555,10 +530,8 @@ class CostmapMapComponent {
              this.ctx.stroke();
         }
 
-
-        // Draw Robot Position - Only draw if robotPosition data exists
+        // Draw Robot Position - Will disappear if this.robotPosition becomes null (due to staleness or explicit 'not found')
         if (this.robotPosition) {
-            // Convert robot's real-world position to pixel coordinates and scale
             const robotPixel = {
                 x: this.realToPixelX(this.robotPosition.x) * scaleX,
                 y: this.realToPixelY(this.robotPosition.y) * scaleY
@@ -568,121 +541,96 @@ class CostmapMapComponent {
             this.ctx.arc(robotPixel.x, robotPixel.y, 5 * markerScale, 0, Math.PI * 2); // Scaled radius
             this.ctx.fill();
 
-            // Draw orientation line (adjust length based on scale if needed)
-            const lineLength = 10 * markerScale; // Scaled line length
-            // Calculate the end point of the orientation line based on robot's yaw
+            // Draw orientation line
+            const lineLength = 10 * markerScale;
             const endX = robotPixel.x + lineLength * Math.cos(this.robotPosition.theta);
-            const endY = robotPixel.y - lineLength * Math.sin(this.robotPosition.theta); // Subtract because canvas Y is inverted
+            const endY = robotPixel.y - lineLength * Math.sin(this.robotPosition.theta); // Canvas Y is inverted
             this.ctx.strokeStyle = 'black';
-            this.ctx.lineWidth = 2 * markerScale; // Scaled line width
+            this.ctx.lineWidth = 2 * markerScale;
             this.ctx.beginPath();
             this.ctx.moveTo(robotPixel.x, robotPixel.y);
             this.ctx.lineTo(endX, endY);
             this.ctx.stroke();
         }
 
-        // Draw Lookahead Point - Only draw if lookaheadPoint data exists
+        // Draw Lookahead Point
         if (this.lookaheadPoint) {
-            // Convert lookahead point's real-world position to pixel coordinates and scale
             const lookaheadPixel = {
                 x: this.realToPixelX(this.lookaheadPoint.x) * scaleX,
                 y: this.realToPixelY(this.lookaheadPoint.y) * scaleY
             };
-             const lookaheadSize = 8 * markerScale; // Scaled size
+            const lookaheadSize = 8 * markerScale;
             this.ctx.fillStyle = 'cyan';
-            this.ctx.fillRect(lookaheadPixel.x - lookaheadSize / 2, lookaheadPixel.y - lookaheadSize / 2, lookaheadSize, lookaheadSize); // Draw a scaled square
+            this.ctx.fillRect(lookaheadPixel.x - lookaheadSize / 2, lookaheadPixel.y - lookaheadSize / 2, lookaheadSize, lookaheadSize);
         }
 
-        // Draw Obstacles - Only draw if obstacles data exists and has items
+        // Draw Obstacles
         if (this.obstacles.size > 0) {
-             // Iterate through the Map of obstacles
              this.obstacles.forEach(obstacle => {
-                 // Convert obstacle's real-world position to pixel coordinates and scale
                  const obstaclePixel = {
                      x: this.realToPixelX(obstacle.x) * scaleX,
                      y: this.realToPixelY(obstacle.y) * scaleY
                  };
-                 // Scale the radius as well (assuming uniform scaling)
-                 const pixelRadius = obstacle.radius * this.pixelsPerMeter * markerScale; // Scale radius based on pixels per meter and canvas scale
-
+                 const pixelRadius = obstacle.radius * this.pixelsPerMeter * markerScale; // Scale radius
                  this.ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Red with some transparency
                  this.ctx.beginPath();
-                 // Draw a circle for the obstacle
                  this.ctx.arc(obstaclePixel.x, obstaclePixel.y, pixelRadius, 0, Math.PI * 2);
                  this.ctx.fill();
              });
         }
 
-
-        // Draw Checkpoints (from properties) - Triangle shape, Magenta color, Scaled
+        // Draw Checkpoints (from properties) - Re-introduced controlled scaling, but smaller
         if (Array.isArray(this.checkpoints) && this.checkpoints.length > 0) {
-             this.checkpoints.forEach((checkpoint, index) => {
-                  // Convert checkpoint's real-world position to pixel coordinates and scale
+             this.checkpoints.forEach((checkpoint) => {
                   const checkpointPixel = {
                       x: this.realToPixelX(checkpoint.x) * scaleX,
                       y: this.realToPixelY(checkpoint.y) * scaleY
                   };
-                  // *** ADDED CONSOLE LOG FOR CHECKPOINT PIXEL COORDS ***
-                  // *** END ADDED CONSOLE LOG ***
+                  // Controlled scaling for fixed-size markers - SMALLER
+                  const baseTriangleSize = 10; // Base size in pixels (was 15)
+                  const triangleSize = Math.max(4, baseTriangleSize * markerScale * 0.6); // Apply a gentler scale, ensure min size (was 5, 0.7)
 
-                  // Draw a magenta triangle, scaled
-                  const triangleSize = 10 * markerScale; // Scaled size
-                  this.ctx.fillStyle = 'magenta'; // Magenta fill
+                  this.ctx.fillStyle = 'magenta';
                   this.ctx.beginPath();
-                  this.ctx.moveTo(checkpointPixel.x, checkpointPixel.y - triangleSize / 2); // Top point
-                  this.ctx.lineTo(checkpointPixel.x - triangleSize / 2, checkpointPixel.y + triangleSize / 2); // Bottom-left point
-                  this.ctx.lineTo(checkpointPixel.x + triangleSize / 2, checkpointPixel.y + triangleSize / 2); // Bottom-right point
-                  this.ctx.closePath(); // Close the triangle path
-                  this.ctx.fill(); // Fill the triangle
-
-                  // Optional: Add a number label for checkpoints - Scale font size too
-                  // const fontSize = 12 * markerScale;
-                  // this.ctx.fillStyle = 'white';
-                  // this.ctx.font = `${fontSize}px Arial`;
-                  // this.ctx.fillText(this.checkpoints.indexOf(checkpoint) + 1, checkpointPixel.x + 6 * markerScale, checkpointPixel.y + 4 * markerScale);
+                  this.ctx.moveTo(checkpointPixel.x, checkpointPixel.y - triangleSize / 2);
+                  this.ctx.lineTo(checkpointPixel.x - triangleSize / 2, checkpointPixel.y + triangleSize / 2);
+                  this.ctx.lineTo(checkpointPixel.x + triangleSize / 2, checkpointPixel.y + triangleSize / 2);
+                  this.ctx.closePath();
+                  this.ctx.fill();
              });
         }
 
-        // --- NEW: Draw Landmarks (from properties) - Square shape, Green color, Scaled ---
+        // Draw Landmarks (from properties) - Re-introduced controlled scaling, but smaller
         if (Array.isArray(this.landmarks) && this.landmarks.length > 0) {
-             this.landmarks.forEach((landmark, index) => {
-                  // Convert landmark's real-world position to pixel coordinates and scale
+             this.landmarks.forEach((landmark) => {
                   const landmarkPixel = {
                       x: this.realToPixelX(landmark.x) * scaleX,
                       y: this.realToPixelY(landmark.y) * scaleY
                   };
-                  // *** ADDED CONSOLE LOG FOR LANDMARK PIXEL COORDS ***
-                  // *** END ADDED CONSOLE LOG ***
+                  // Controlled scaling for fixed-size markers - SMALLER
+                  const baseSquareSize = 8; // Base size in pixels (was 12)
+                  const squareSize = Math.max(3, baseSquareSize * markerScale * 0.6); // (was 4, 0.7)
 
-                  // Draw a green square, scaled
-                  const squareSize = 8 * markerScale; // Scaled size
-                  this.ctx.fillStyle = 'green'; // Green fill
-                  this.ctx.fillRect(landmarkPixel.x - squareSize / 2, landmarkPixel.y - squareSize / 2, squareSize, squareSize); // Draw a scaled square
-
-
-                  // Optional: Add a label (e.g., L01, L02) - Scale font size and position too
-                  // const fontSize = 12 * markerScale;
-                  // this.ctx.fillStyle = 'black'; // Label color
-                  // this.ctx.font = `${fontSize}px Arial`; // Label font
-                  // // Position the text slightly below and to the right of the marker
-                  // this.ctx.fillText(`L${index + 1}`, landmarkPixel.x + 7 * markerScale, landmarkPixel.y + 10 * markerScale);
+                  this.ctx.fillStyle = 'green';
+                  this.ctx.fillRect(landmarkPixel.x - squareSize / 2, landmarkPixel.y - squareSize / 2, squareSize, squareSize);
              });
         }
-        // --- End NEW ---
 
-
-        // Draw Final Goal (from properties) - 'X' shape, Lime color, Scaled
+        // Draw Final Goal (from properties) - Re-introduced controlled scaling, but smaller
         if (this.finalGoal) {
-             // Convert final goal's real-world position to pixel coordinates and scale
              const finalGoalPixel = {
                  x: this.realToPixelX(this.finalGoal.x) * scaleX,
                  y: this.realToPixelY(this.finalGoal.y) * scaleY
              };
-             this.ctx.strokeStyle = 'lime'; // Use lime green for the final goal
-             this.ctx.lineWidth = 3 * markerScale; // Scaled line width
-             const xSize = 10 * markerScale; // Scaled size of the 'X'
+             this.ctx.strokeStyle = 'lime';
+             // Controlled line width - SMALLER
+             const baseLineWidth = 2; // (was 3)
+             this.ctx.lineWidth = Math.max(1, baseLineWidth * markerScale * 0.4); // (was 1, 0.5)
 
-             // Draw the 'X'
+             // Controlled size for the 'X' - SMALLER
+             const baseXSize = 14; // Base size in pixels for the 'X' (was 18)
+             const xSize = Math.max(6, baseXSize * markerScale * 0.6); // Adjust for visual balance (was 8, 0.7)
+
              this.ctx.beginPath();
              this.ctx.moveTo(finalGoalPixel.x - xSize / 2, finalGoalPixel.y - xSize / 2);
              this.ctx.lineTo(finalGoalPixel.x + xSize / 2, finalGoalPixel.y + xSize / 2);
@@ -692,16 +640,41 @@ class CostmapMapComponent {
              this.ctx.moveTo(finalGoalPixel.x + xSize / 2, finalGoalPixel.y - xSize / 2);
              this.ctx.lineTo(finalGoalPixel.x - xSize / 2, finalGoalPixel.y + xSize / 2);
              this.ctx.stroke();
+        }
+    }
 
-             // Optional: Add a label - Scale font size and position too
-             // const fontSize = 14 * markerScale;
-             // this.ctx.fillStyle = 'black';
-             // this.ctx.font = `${fontSize}px Arial`;
-             // this.ctx.fillText('Goal', finalGoalPixel.x + 10 * markerScale, finalGoalPixel.y + 5 * markerScale);
+    // NEW: checkStaleData method
+    checkStaleData() {
+        const now = performance.now();
+
+        // Check Robot Pose
+        if (this.robotPosition && (now - this.lastRobotPoseReceiveTime > this.dataStaleTimeoutMs)) {
+            console.warn('Map: Robot pose data is stale. Clearing robot display.');
+            this.robotPosition = null;
+            this.lastRobotPoseReceiveTime = 0; // Reset timestamp
         }
 
+        // Check Global Path
+        if (this.globalPath.length > 0 && (now - this.lastGlobalPathReceiveTime > this.dataStaleTimeoutMs)) {
+            console.warn('Map: Global path data is stale. Clearing path display.');
+            this.globalPath = [];
+            this.lastGlobalPathReceiveTime = 0; // Reset timestamp
+        }
 
-        // Optional: Add labels or legend
+        // Check Traversed Path
+        if (this.traversedPath.length > 0 && (now - this.lastTraversedPathReceiveTime > this.dataStaleTimeoutMs)) {
+            console.warn('Map: Traversed path data is stale. Clearing path display.');
+            this.traversedPath = [];
+            this.lastTraversedPathReceiveTime = 0; // Reset timestamp
+        }
+
+        // Check Obstacles
+        if (this.obstacles.size > 0 && (now - this.lastObstaclesReceiveTime > this.dataStaleTimeoutMs)) {
+             console.warn('Map: Obstacle data is stale. Clearing obstacle display.');
+             this.obstacles.clear();
+             this.lastObstaclesReceiveTime = 0; // Reset timestamp
+        }
+        // Note: No need to call drawMap() here, as animate() calls it right after.
     }
 
     // --- ROS Connection and Topic Setup ---
@@ -714,12 +687,17 @@ class CostmapMapComponent {
                  });
 
                  this.ros.on('connection', () => {
+                     console.log('Map: ROS Connected.');
                      this.setupRosTopics(); // Setup topics once connected
                  });
 
-                 this.ros.on('error', (error) => { console.error('Map: ROS Connection error:', error); });
+                 this.ros.on('error', (error) => {
+                    console.error('Map: ROS Connection error:', error);
+                    // On connection error, assume all data streams stop
+                    this.clearDynamicData(); // Clear stale data on error
+                    this.drawMap(); // Redraw to clear visualization
+                 });
 
-                 // Clear dynamic data on ROS connection close
                  this.ros.on('close', () => {
                      console.warn('Map: ROS Connection closed. Clearing dynamic data.');
                      this.clearDynamicData(); // Clear the stored data
@@ -740,7 +718,6 @@ class CostmapMapComponent {
              this.setupRosTopics();
         } else if (this.ros) {
              console.warn('Map: ROS connection not established. Waiting for connection to setup topics.');
-             // The 'connection' listener above will handle setting up topics
          }
     }
 
@@ -751,8 +728,6 @@ class CostmapMapComponent {
          }
 
          // --- Setup Subscribers for relevant ROS topics ---
-         // Replace topic names and message types with your actual topics
-
          // Robot Pose
          this.robotPoseTopic = new ROSLIB.Topic({
              ros: this.ros,
@@ -760,6 +735,8 @@ class CostmapMapComponent {
              messageType: 'gazebo_msgs/ModelStates' // Replace with your pose message type
          });
          this.robotPoseTopic.subscribe(this.handleRobotPose.bind(this));
+         console.log('Map: Subscribed to /gazebo/model_states');
+
 
          // Global Path
          this.pathTopic = new ROSLIB.Topic({
@@ -768,82 +745,74 @@ class CostmapMapComponent {
              messageType: 'nav_msgs/Path' // Replace with your path message type
          });
          this.pathTopic.subscribe(this.handleGlobalPath.bind(this));
+         console.log('Map: Subscribed to /Path');
 
-         // Traversed Path (You might need to publish this from your Control node)
+         // Traversed Path
          this.traversedPathTopic = new ROSLIB.Topic({
              ros: this.ros,
              name: '/traversed_path', // Example topic name
              messageType: 'nav_msgs/Path' // Example message type
          });
          this.traversedPathTopic.subscribe(this.handleTraversedPath.bind(this));
+         console.log('Map: Subscribed to /traversed_path');
 
-
-         // Obstacles (Using the roar_msgs/Obstacle message definition you provided)
+         // Obstacles
          this.obstaclesTopic = new ROSLIB.Topic({
              ros: this.ros,
              name: '/obstacles', // Replace with your obstacle topic name
              messageType: 'roar_msgs/Obstacle' // Use the message type name
          });
          this.obstaclesTopic.subscribe(this.handleObstacles.bind(this));
-
-         // Checkpoints (If published, or get from APF object properties if static)
-         // If you later decide to publish checkpoints from ROS, uncomment this and add handler:
-         // this.checkpointsTopic = new ROSLIB.Topic({...});
-         // this.checkpointsTopic.subscribe(this.handleCheckpoints.bind(this));
-
-         // Landmarks (If published, or get from a static source)
-         // If you later decide to publish landmarks from ROS, uncomment this and add handler:
-         // this.landmarksTopic = new ROSLIB.Topic({...});
-         // this.landmarksTopic.subscribe(this.handleLandmarks.bind(this));
+         console.log('Map: Subscribed to /obstacles');
 
          // Lookahead Point (If published separately by APF)
-         // this.lookaheadTopic = new ROSLIB.Topic({...});
+         // this.lookaheadTopic = new ROSLIB.Topic({
+         //    ros: this.ros,
+         //    name: '/lookahead_point', // Example topic name
+         //    messageType: 'geometry_msgs/PointStamped' // Or appropriate message type
+         // });
          // this.lookaheadTopic.subscribe(this.handleLookahead.bind(this));
-
-
+         // console.log('Map: Subscribed to /lookahead_point');
     }
 
-    // --- Method to clear dynamic data ---
+    // --- Method to clear dynamic data (robot pose, paths, obstacles) ---
     clearDynamicData() {
         this.robotPosition = null;
         this.globalPath = [];
         this.traversedPath = [];
         this.lookaheadPoint = null;
         this.obstacles.clear(); // Clear the Map
-
+        // Also reset timestamps to ensure things don't immediately reappear if any data source becomes active quickly
+        this.lastRobotPoseReceiveTime = 0;
+        this.lastGlobalPathReceiveTime = 0;
+        this.lastTraversedPathReceiveTime = 0;
+        this.lastObstaclesReceiveTime = 0;
     }
-    // --- End Method to clear dynamic data ---
-
 
     // --- ROS Message Handlers (update data and redraw) ---
     handleRobotPose(msg) {
-        // Implement browser-side rate limiting
-        const now = performance.now();
+        const now = performance.now(); // Get current time for rate limiting and staleness tracking
+
+        // Rate limiting for drawing updates (only update this.lastProcessedPoseTime if we draw)
         if (now - this.lastProcessedPoseTime < this.minProcessingIntervalMs) {
-            // If not enough time has passed since the last processed update, discard this message
+            this.lastRobotPoseReceiveTime = now; // Always update receive time to prevent premature staleness
             return;
         }
-        // Update the timestamp of the last processed update
-        this.lastProcessedPoseTime = now;
+        this.lastProcessedPoseTime = now; // Update timestamp for drawing rate limiting
 
         try {
-            const robotName = 'roar'; // Match your robot model name
+            const robotName = 'roar'; // Match your robot model name in Gazebo
             const robotIndex = msg.name.indexOf(robotName);
+
             if (robotIndex !== -1) {
                 const pose = msg.pose[robotIndex];
                 const orientation = pose.orientation;
 
-                // Create ROSLIB.Quaternion
                 const q = new ROSLIB.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w);
-
                 let rpy = { x: 0, y: 0, z: 0 };
-
-                // Check if toEuler method exists before calling, or use manual conversion
                 if (typeof q.toEuler === 'function') {
                     rpy = q.toEuler();
                 } else {
-                    // Manual Quaternion to Euler (Yaw) Conversion
-                    // This is a simplified conversion assuming the robot is mostly flat (no pitch/roll)
                     const siny_cosp = 2 * (q.w * q.z + q.x * q.y);
                     const cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
                     rpy.z = Math.atan2(siny_cosp, cosy_cosp);
@@ -852,45 +821,67 @@ class CostmapMapComponent {
                 this.robotPosition = {
                     x: pose.position.x,
                     y: pose.position.y,
-                    theta: rpy.z // Use the calculated yaw
+                    theta: rpy.z
                 };
-                this.drawMap(); // Redraw when robot pose updates
+                this.lastRobotPoseReceiveTime = now; // IMPORTANT: Update receive time here
+
+                // drawMap() will be called by the animate() loop
+            } else {
+                // If robot model is explicitly not found in a *received* message, clear it immediately
+                if (this.robotPosition !== null) {
+                    this.robotPosition = null;
+                    this.lastRobotPoseReceiveTime = 0; // Reset timestamp, effectively making it stale
+                    // drawMap() will be called by the animate() loop
+                    console.warn(`Map: Robot model '${robotName}' not found in /gazebo/model_states message. Clearing robot display.`);
+                }
             }
         } catch (error) {
             console.error('Map: Error processing robot pose message:', error);
+            if (this.robotPosition !== null) {
+                this.robotPosition = null;
+                this.lastRobotPoseReceiveTime = 0; // Reset timestamp on error
+                // drawMap() will be called by the animate() loop
+            }
         }
     }
 
     handleGlobalPath(msg) {
-        // Ensure msg.poses is an array before mapping
-        if (Array.isArray(msg.poses)) {
+        const now = performance.now(); // Get current time
+        if (Array.isArray(msg.poses) && msg.poses.length > 0) {
             this.globalPath = msg.poses.map(p => ({ x: p.pose.position.x, y: p.pose.position.y }));
-            this.drawMap(); // Redraw when global path updates
+            this.lastGlobalPathReceiveTime = now; // IMPORTANT: Update receive time here
+            // drawMap() will be called by the animate() loop
         } else {
-            console.warn('Map: Received global path message with invalid poses data.', msg);
-            this.globalPath = []; // Clear path on invalid data
-            this.drawMap(); // Redraw
+            // If path is empty or invalid in a *received* message, clear it immediately
+            if (this.globalPath.length > 0) {
+                 console.warn('Map: Received empty or invalid global path message. Clearing path.');
+                 this.globalPath = [];
+                 this.lastGlobalPathReceiveTime = 0; // Reset timestamp
+                 // drawMap() will be called by the animate() loop
+            }
         }
     }
 
     handleTraversedPath(msg) {
-         // Ensure msg.poses is an array before mapping
-         if (Array.isArray(msg.poses)) {
+         const now = performance.now(); // Get current time
+         if (Array.isArray(msg.poses) && msg.poses.length > 0) {
             this.traversedPath = msg.poses.map(p => ({ x: p.pose.position.x, y: p.pose.position.y }));
-            this.drawMap(); // Redraw when traversed path updates
+            this.lastTraversedPathReceiveTime = now; // IMPORTANT: Update receive time here
+            // drawMap() will be called by the animate() loop
          } else {
-             console.warn('Map: Received traversed path message with invalid poses data.', msg);
-             this.traversedPath = []; // Clear path on invalid data
-             this.drawMap(); // Redraw
+            // If path is empty or invalid in a *received* message, clear it immediately
+            if (this.traversedPath.length > 0) {
+                 console.warn('Map: Received empty or invalid traversed path message. Clearing path.');
+                 this.traversedPath = [];
+                 this.lastTraversedPathReceiveTime = 0; // Reset timestamp
+                 // drawMap() will be called by the animate() loop
+            }
          }
     }
 
-    // Handle Obstacle message based on roar_msgs/Obstacle definition
     handleObstacles(msg) {
-        // Assuming each message is for a single obstacle update.
-        // If your topic sends a list of obstacles in one message, this needs adjustment.
+        const now = performance.now(); // Get current time
         try {
-            // Basic validation for expected fields
             if (msg && msg.id && msg.id.data !== undefined && msg.position && msg.position.pose && msg.position.pose.position && msg.radius && msg.radius.data !== undefined) {
                 const obstacleId = msg.id.data;
                 const obstacleData = {
@@ -898,9 +889,9 @@ class CostmapMapComponent {
                     y: msg.position.pose.position.y,
                     radius: msg.radius.data
                 };
-                // Store or update the obstacle data in the Map using its ID as the key
                 this.obstacles.set(obstacleId, obstacleData);
-                this.drawMap(); // Redraw when obstacles update
+                this.lastObstaclesReceiveTime = now; // IMPORTANT: Update receive time here
+                // drawMap() will be called by the animate() loop
             } else {
                  console.warn('Map: Received obstacle message with missing or invalid fields.', msg);
             }
@@ -909,13 +900,17 @@ class CostmapMapComponent {
         }
     }
 
-    // handleCheckpoints(msg) { ... }
-    // handleLandmarks(msg) { ... }
-    // handleLookahead(msg) { ... }
-
+    // handleLookahead(msg) { ... } // If you enable lookahead topic, update its timestamp here
+    // handleCheckpoints(msg) { ... } // If these become dynamic, update timestamps
+    // handleLandmarks(msg) { ... } // If these become dynamic, update timestamps
 
     destroy() {
         window.removeEventListener('resize', this.resizeHandler);
+
+        // Cancel the animation frame loop
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+        }
 
         // Unsubscribe from all ROS topics
         if (this.robotPoseTopic) this.robotPoseTopic.unsubscribe();
@@ -923,18 +918,14 @@ class CostmapMapComponent {
         if (this.traversedPathTopic) this.traversedPathTopic.unsubscribe();
         if (this.lookaheadTopic) this.lookaheadTopic.unsubscribe();
         if (this.obstaclesTopic) this.obstaclesTopic.unsubscribe();
-        // if (this.checkpointsTopic) this.checkpointsTopic.unsubscribe(); // Unsubscribe if you add this topic later
-        // if (this.landmarksTopic) this.landmarksTopic.unsubscribe(); // Unsubscribe if you add this topic later
 
         // Clear any remaining dynamic data when the component is destroyed
         this.clearDynamicData();
 
-        // Close ROS connection if this component is responsible for it
-        // If your combo plugin manages the main ROS connection, you might not close it here.
-        // If this component has its own ROS connection, close it.
-        // if (this.ros && this.ros.isConnected) {
-        //     this.ros.close();
-        // }
+        // Close ROS connection if this component is solely responsible for it
+        if (this.ros && this.ros.isConnected) {
+            this.ros.close();
+        }
         this.ros = null;
 
         if (this.canvas && this.canvas.parentElement) {
@@ -942,9 +933,5 @@ class CostmapMapComponent {
         }
         this.canvas = null;
         this.ctx = null;
-
     }
 }
-
-// The plugin factory function is now attached to the window object
-// window.CostmapMapPlugin = function CostmapMapPlugin(options) { ... }

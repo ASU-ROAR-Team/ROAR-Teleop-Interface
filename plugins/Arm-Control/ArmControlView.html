@@ -1,4 +1,4 @@
-<div class="arm-control-container">
+<div class="arm-robot-control-container">
     <div class="joysticks-wrapper">
         <div class="joystick-group">
             <div class="joystick-canvas-wrapper">
@@ -11,6 +11,12 @@
                 <canvas id="joystickCanvas2" class="joystick-canvas"></canvas>
             </div>
             </div>
+
+        <div class="joystick-group">
+            <div class="joystick-canvas-wrapper">
+                <canvas id="joystickCanvas3" class="joystick-canvas"></canvas>
+            </div>
+        </div>
     </div>
 
     <div id="joystickStatus" class="joystick-status">
@@ -18,15 +24,17 @@
     </div>
 
     <div class="joystick-overall-label">
-        Joystick 1: Joints 1 (L/R) & 2 (U/D) | Joystick 2: Joints 3 (L/R) & 4 (U/D)
+        Joystick 1: Joints 1 (L/R) & 2 (U/D) | Joystick 2: Joints 3 (L/R) & 4 (U/D) | Joystick 3: Joints 5 (L/R) & 6 (U/D)
     </div>
 
-    <h3>Current Joint Velocities</h3>
+    <h3 class="joint-velocities-header">Current Joint Velocities</h3>
     <div class="joint-display">
         <span id="joint1Vel" class="joint-value zero">J1: 0.0</span>
         <span id="joint2Vel" class="joint-value zero">J2: 0.0</span>
         <span id="joint3Vel" class="joint-value zero">J3: 0.0</span>
         <span id="joint4Vel" class="joint-value zero">J4: 0.0</span>
+        <span id="joint5Vel" class="joint-value zero">J5: 0.0</span>
+        <span id="joint6Vel" class="joint-value zero">J6: 0.0</span>
     </div>
 
     <div class="velocity-slider-section">
@@ -36,4 +44,4 @@
             <span id="maxVelocityValue" class="velocity-value">15</span> RPM
         </div>
     </div>
-</div>
+</div> 

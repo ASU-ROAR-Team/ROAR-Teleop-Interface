@@ -1,130 +1,171 @@
 /* src/plugins/joystick-control/JoystickView.css */
 
-.joystick-container {
+/* Scope all styles to the unique .rover-joystick-container */
+.rover-joystick-container {
     display: flex;
     flex-direction: column;
     align-items: center; /* Center horizontally */
-    justify-content: center; /* Center vertically */
-    padding: 20px;
-    background-color: #2c2c2c; /* Dark background for the control area */
-    border-radius: 10px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    font-family: 'Inter', sans-serif; /* Use Inter font */
-    color: #e0e0e0; /* Light text color */
-    width: 100%; /* Take full width of its parent */
-    height: 100%; /* Take full height of its parent */
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
-    overflow: auto; /* Allow scrolling if content overflows */
+    justify-content: flex-start; /* Align content to the top within the container */
+    padding: 8px;
+    /* Use OpenMCT's background variable for the main panel background */
+    background-color: var(--background-color--lvl3); /* Typically a darker background for panels */
+    border-radius: 6px;
+    /* Use OpenMCT's border/shadow variables */
+    box-shadow: var(--shadow-small);
+    font-family: Arial, sans-serif;
+    /* Use OpenMCT's text color variable */
+    color: var(--color-text);
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    font-size: 0.85em;
 }
 
-.joystick-canvas-wrapper {
+.rover-joystick-container .joystick-canvas-wrapper {
     position: relative;
-    width: 250px; /* Fixed width for the canvas wrapper */
-    height: 250px; /* Fixed height for the canvas wrapper */
-    margin-bottom: 30px;
+    width: 150px;
+    height: 150px;
+    margin-bottom: 15px;
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #3a3a3a; /* Slightly lighter background for the canvas area */
-    border-radius: 50%; /* Make it circular */
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+    /* Use a slightly different background for the canvas area, still theme-aware */
+    background-color: var(--background-color--lvl2); /* A bit lighter than lvl3 */
+    border-radius: 50%;
+    /* Use OpenMCT's shadow or a custom inset shadow with theme colors */
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.3); /* Keep this fixed for depth or use a variable if available */
 }
 
-#joystickCanvas {
-    background-color: transparent; /* Canvas background is transparent, wrapper provides color */
-    border: 2px solid #555;
+.rover-joystick-container #joystickCanvas {
+    background-color: transparent;
+    /* Use OpenMCT's border color */
+    border: 1px solid var(--border-color--light);
     border-radius: 50%;
     cursor: grab;
-    touch-action: none; /* Prevent default touch actions like scrolling/zooming */
-    width: 100%; /* Canvas fills its wrapper */
-    height: 100%; /* Canvas fills its wrapper */
+    touch-action: none;
+    width: 100%;
+    height: 100%;
 }
 
-#joystickCanvas:active {
+.rover-joystick-container #joystickCanvas:active {
     cursor: grabbing;
 }
 
-.joystick-status {
+.rover-joystick-container .joystick-status {
     position: absolute;
-    bottom: -25px; /* Position below the canvas */
+    bottom: -18px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 0.9em;
-    color: #aaa;
+    font-size: 0.75em;
+    /* Use a softer text color, theme-aware */
+    color: var(--color-text--light);
 }
 
-.joystick-status.connected {
-    color: #4CAF50; /* Green for connected */
+.rover-joystick-container .joystick-status.connected {
+    color: var(--color-success); /* Green for connected */
 }
 
-.joystick-status.error {
-    color: #F44336; /* Red for error */
+.rover-joystick-container .joystick-status.error {
+    color: var(--color-error); /* Red for error */
 }
 
-.speed-controls {
+.rover-joystick-container .speed-controls {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    width: 80%; /* Control width of sliders */
-    max-width: 400px; /* Max width for larger screens */
+    gap: 12px;
+    width: 95%;
+    max-width: 280px;
+    margin-top: 8px;
 }
 
-.speed-slider-group {
+.rover-joystick-container .speed-slider-group {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: 4px;
 }
 
-.speed-slider-group label {
-    font-size: 1em;
+.rover-joystick-container .speed-slider-group label {
+    font-size: 0.85em;
     font-weight: bold;
-    color: #e0e0e0;
+    /* Use OpenMCT's text color */
+    color: var(--color-text);
 }
 
-.speed-slider-group input[type="range"] {
+.rover-joystick-container .speed-slider-group input[type="range"] {
     width: 100%;
-    -webkit-appearance: none; /* Override default slider styles */
-    height: 8px;
-    background: #555;
+    -webkit-appearance: none;
+    height: 5px;
+    /* Use OpenMCT's border or background color for the track */
+    background: var(--border-color--dark); /* A darker border color for the slider track */
     outline: none;
-    border-radius: 5px;
+    border-radius: 2px;
     transition: opacity .2s;
 }
 
-.speed-slider-group input[type="range"]::-webkit-slider-thumb {
+.rover-joystick-container .speed-slider-group input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #f84632; /* Primary color */
+    /* Use your accent color, or define it as a CSS variable if you want it theme-switchable */
+    background: #f84632; /* Primary color - kept as fixed accent */
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-small);
 }
 
-.speed-slider-group input[type="range"]::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
+.rover-joystick-container .speed-slider-group input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #f84632;
+    background: #f84632; /* Primary color - kept as fixed accent */
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-small);
 }
 
-.speed-value {
+.rover-joystick-container .speed-value {
     font-weight: bold;
-    color: #f84632; /* Accent color */
-    margin-left: 5px;
+    color: #f84632; /* Accent color - kept as fixed accent */
+    margin-left: 2px;
+    font-size: 0.85em;
 }
 
-/* Responsive adjustments */
+/* Responsive adjustments - further refined */
 @media (max-width: 768px) {
-    .joystick-canvas-wrapper {
-        width: 200px;
-        height: 200px;
+    .rover-joystick-container .joystick-canvas-wrapper {
+        width: 130px;
+        height: 130px;
+        margin-bottom: 12px;
     }
-    .speed-controls {
-        width: 95%;
+    .rover-joystick-container .speed-controls {
+        width: 100%;
+        max-width: 220px;
+        gap: 8px;
+    }
+    .rover-joystick-container {
+        padding: 6px;
+        font-size: 0.8em;
+    }
+}
+
+@media (max-width: 480px) {
+    .rover-joystick-container .joystick-canvas-wrapper {
+        width: 100px;
+        height: 100px;
+    }
+    .rover-joystick-container .speed-controls {
+        max-width: 180px;
+    }
+    .rover-joystick-container {
+        font-size: 0.75em;
+        padding: 4px;
+    }
+    .rover-joystick-container .speed-slider-group label {
+        font-size: 0.8em;
+    }
+    .rover-joystick-container .speed-value {
+        font-size: 0.8em;
     }
 }

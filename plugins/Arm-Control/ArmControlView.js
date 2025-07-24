@@ -14,6 +14,8 @@
             this.ctx1 = null;
             this.canvas2 = null;
             this.ctx2 = null;
+            this.canvas3 = null; // NEW: Canvas for the third joystick
+            this.ctx3 = null;    // NEW: Context for the third joystick
 
             this.joystickRadius = 0; // Calculated dynamically based on canvas size
             this.thumbRadius = 8; // Drastically REDUCED THUMB SIZE for small joysticks
@@ -40,6 +42,18 @@
                 currentJoint4Vel: 0
             };
 
+            // NEW: Joystick 3 state (for Joint 5 and Joint 6)
+            this.joystick3 = {
+                centerX: 0,
+                centerY: 0,
+                thumbX: 0,
+                thumbY: 0,
+                isDragging: false,
+                currentJoint5Vel: 0, // Maps to J5
+                currentJoint6Vel: 0  // Maps to J6
+            };
+
+
             this.maxVelocity = 15.0; // Initial max velocity for DC motor (e.g., 15 RPM, max 30 RPM)
 
             this.ros = null;
@@ -56,8 +70,46 @@
             this.handleRosConnection = this.handleRosConnection.bind(this);
             this.handleRosError = this.handleRosError.bind(this);
             this.handleRosClose = this.handleRosClose.bind(this);
-            this.drawJoystick = this.drawJoystick.bind(this); // Bind for window resize
+            this.drawJoystick = this.drawJoystick.bind(this); // Bind for window resize - NOTE: This isn't the direct resize handler itself
             this.publishJointVelocities = this.publishJointVelocities.bind(this);
+
+            // Store references to bound event handlers for proper removal
+            this.boundHandlers = {
+                canvas1: {},
+                canvas2: {},
+                canvas3: {}
+            };
+            this.boundResizeHandler = this.createBoundResizeHandler();
+        }
+
+        /**
+         * Creates a bound resize handler to ensure proper `this` context and allow removal.
+         * It also correctly re-initializes canvas dimensions based on their fixed size.
+         * @returns {function} A function bound to `this` to handle resize events.
+         */
+        createBoundResizeHandler() {
+            return () => {
+                // When resizing, we re-setup each canvas to ensure its internal drawing surface
+                // is correctly sized (80x80px in this case) and reset thumb position.
+                // We do NOT use wrapper.clientWidth/Height here, as the canvas itself is fixed size.
+                if (this.canvas1) {
+                    this.setupCanvas(this.canvas1, this.joystick1); // Re-runs setupCanvas, which sets width/height to 80
+                    this.joystick1.currentJoint1Vel = 0;
+                    this.joystick1.currentJoint2Vel = 0;
+                }
+                if (this.canvas2) {
+                    this.setupCanvas(this.canvas2, this.joystick2);
+                    this.joystick2.currentJoint3Vel = 0;
+                    this.joystick2.currentJoint4Vel = 0;
+                }
+                if (this.canvas3) { // Handle resize for third joystick
+                    this.setupCanvas(this.canvas3, this.joystick3);
+                    this.joystick3.currentJoint5Vel = 0;
+                    this.joystick3.currentJoint6Vel = 0;
+                }
+                this.updateJointVelocityDisplays();
+                this.publishJointVelocities(); // Publish zero velocities after resize
+            };
         }
 
         /**
@@ -96,6 +148,8 @@
             this.ctx1 = this.canvas1.getContext('2d');
             this.canvas2 = this.element.querySelector('#joystickCanvas2');
             this.ctx2 = this.canvas2.getContext('2d');
+            this.canvas3 = this.element.querySelector('#joystickCanvas3'); // NEW: Get third canvas
+            this.ctx3 = this.canvas3.getContext('2d');                     // NEW: Get third context
 
             // Get references to slider, value display, and status elements
             this.maxVelocitySlider = this.element.querySelector('#maxVelocity');
@@ -107,10 +161,13 @@
             this.joint2VelSpan = this.element.querySelector('#joint2Vel');
             this.joint3VelSpan = this.element.querySelector('#joint3Vel');
             this.joint4VelSpan = this.element.querySelector('#joint4Vel');
+            this.joint5VelSpan = this.element.querySelector('#joint5Vel'); // NEW: Get Joint 5 span
+            this.joint6VelSpan = this.element.querySelector('#joint6Vel'); // NEW: Get Joint 6 span
 
             // Set up and draw joysticks initially
             this.setupCanvas(this.canvas1, this.joystick1);
             this.setupCanvas(this.canvas2, this.joystick2);
+            this.setupCanvas(this.canvas3, this.joystick3); // NEW: Setup third canvas
 
             // Add all necessary event listeners
             this.addEventListeners();
@@ -125,13 +182,11 @@
          * @param {Object} joystickState The state object for the joystick.
          */
         setupCanvas(canvas, joystickState) {
-            const wrapper = canvas.parentElement;
-            // Set canvas dimensions to match its parent wrapper
-            canvas.width = wrapper.clientWidth;
-            canvas.height = wrapper.clientHeight;
+            // Set canvas dimensions explicitly to match desired CSS size (e.g., 80px)
+            canvas.width = 80;
+            canvas.height = 80;
 
             // Calculate joystick base radius dynamically, accounting for thumb size
-            // This ensures the thumb has room to move within the base, and joysticks are equal size
             this.joystickRadius = Math.min(canvas.width, canvas.height) / 2 - (this.thumbRadius + 2); // Added a small 2px buffer
 
             // Set joystick center and initial thumb position to the center
@@ -148,96 +203,73 @@
          * Adds all event listeners for joystick interaction and the velocity slider.
          */
         addEventListeners() {
-            // Mouse events for Joystick 1
-            this.canvas1.addEventListener('mousedown', (e) => this.onMouseDown(e, this.canvas1, this.joystick1));
-            this.canvas1.addEventListener('mousemove', (e) => this.onMouseMove(e, this.canvas1, this.joystick1));
-            this.canvas1.addEventListener('mouseup', (e) => this.onMouseUp(this.joystick1));
-            this.canvas1.addEventListener('mouseleave', (e) => this.onMouseLeave(this.joystick1));
-            // Add mouseenter to set cursor to grab when hovering over the canvas
-            this.canvas1.addEventListener('mouseenter', (e) => {
-                if (!this.joystick1.isDragging) {
-                    this.canvas1.style.cursor = 'grab';
-                }
-            });
+            // Helper function to add event listeners for a single joystick
+            const addJoystickListeners = (canvas, joystickState, boundHandlersObj) => {
+                boundHandlersObj.mousedown = (e) => this.onMouseDown(e, canvas, joystickState);
+                boundHandlersObj.mousemove = (e) => this.onMouseMove(e, canvas, joystickState);
+                boundHandlersObj.mouseup = () => this.onMouseUp(joystickState);
+                boundHandlersObj.mouseleave = () => this.onMouseLeave(joystickState);
+                boundHandlersObj.mouseenter = () => {
+                    if (!joystickState.isDragging) {
+                        canvas.style.cursor = 'grab';
+                    }
+                };
+                boundHandlersObj.touchstart = (e) => { e.preventDefault(); this.onMouseDown(e.touches[0], canvas, joystickState); };
+                boundHandlersObj.touchmove = (e) => { e.preventDefault(); this.onMouseMove(e.touches[0], canvas, joystickState); };
+                boundHandlersObj.touchend = () => this.onMouseUp(joystickState);
+                boundHandlersObj.touchcancel = () => this.onMouseUp(joystickState);
 
+                canvas.addEventListener('mousedown', boundHandlersObj.mousedown);
+                canvas.addEventListener('mousemove', boundHandlersObj.mousemove);
+                canvas.addEventListener('mouseup', boundHandlersObj.mouseup);
+                canvas.addEventListener('mouseleave', boundHandlersObj.mouseleave);
+                canvas.addEventListener('mouseenter', boundHandlersObj.mouseenter);
+                canvas.addEventListener('touchstart', boundHandlersObj.touchstart);
+                canvas.addEventListener('touchmove', boundHandlersObj.touchmove);
+                canvas.addEventListener('touchend', boundHandlersObj.touchend);
+                canvas.addEventListener('touchcancel', boundHandlersObj.touchcancel);
+            };
 
-            // Touch events for Joystick 1 (prevent default to avoid scrolling/zooming)
-            this.canvas1.addEventListener('touchstart', (e) => { e.preventDefault(); this.onMouseDown(e.touches[0], this.canvas1, this.joystick1); });
-            this.canvas1.addEventListener('touchmove', (e) => { e.preventDefault(); this.onMouseMove(e.touches[0], this.canvas1, this.joystick1); });
-            this.canvas1.addEventListener('touchend', (e) => this.onMouseUp(this.joystick1));
-            this.canvas1.addEventListener('touchcancel', (e) => this.onMouseUp(this.joystick1)); // Handle touch interruption
-
-            // Mouse events for Joystick 2
-            this.canvas2.addEventListener('mousedown', (e) => this.onMouseDown(e, this.canvas2, this.joystick2));
-            this.canvas2.addEventListener('mousemove', (e) => this.onMouseMove(e, this.canvas2, this.joystick2));
-            this.canvas2.addEventListener('mouseup', (e) => this.onMouseUp(this.joystick2));
-            this.canvas2.addEventListener('mouseleave', (e) => this.onMouseLeave(this.joystick2));
-            // Add mouseenter to set cursor to grab when hovering over the canvas
-            this.canvas2.addEventListener('mouseenter', (e) => {
-                if (!this.joystick2.isDragging) {
-                    this.canvas2.style.cursor = 'grab';
-                }
-            });
-
-
-            // Touch events for Joystick 2
-            this.canvas2.addEventListener('touchstart', (e) => { e.preventDefault(); this.onMouseDown(e.touches[0], this.canvas2, this.joystick2); });
-            this.canvas2.addEventListener('touchmove', (e) => { e.preventDefault(); this.onMouseMove(e.touches[0], this.canvas2, this.joystick2); });
-            this.canvas2.addEventListener('touchend', (e) => this.onMouseUp(this.joystick2));
-            this.canvas2.addEventListener('touchcancel', (e) => this.onMouseUp(this.joystick2));
+            // Add listeners for all joysticks, storing their bound handlers
+            addJoystickListeners(this.canvas1, this.joystick1, this.boundHandlers.canvas1);
+            addJoystickListeners(this.canvas2, this.joystick2, this.boundHandlers.canvas2);
+            addJoystickListeners(this.canvas3, this.joystick3, this.boundHandlers.canvas3); // NEW: Add listeners for third joystick
 
             // Event listener for the Max Velocity slider
             this.maxVelocitySlider.addEventListener('input', this.updateMaxVelocity);
 
-            // Handle window resize to redraw canvases and reset joysticks (important for responsiveness)
-            window.addEventListener('resize', () => {
-                if (this.canvas1) {
-                    this.setupCanvas(this.canvas1, this.joystick1);
-                    this.joystick1.currentJoint1Vel = 0; // Reset velocities on resize
-                    this.joystick1.currentJoint2Vel = 0;
-                }
-                if (this.canvas2) {
-                    this.setupCanvas(this.canvas2, this.joystick2);
-                    this.joystick2.currentJoint3Vel = 0; // Reset velocities on resize
-                    this.joystick2.currentJoint4Vel = 0;
-                }
-                this.updateJointVelocityDisplays();
-                this.publishJointVelocities(); // Publish zero velocities after resize
-            });
+            // Use the bound resize handler for window resize
+            window.addEventListener('resize', this.boundResizeHandler);
         }
 
         /**
          * Removes all event listeners to prevent memory leaks, especially when the view is destroyed.
          */
         removeEventListeners() {
-            if (this.canvas1) {
-                this.canvas1.removeEventListener('mousedown', (e) => this.onMouseDown(e, this.canvas1, this.joystick1));
-                this.canvas1.removeEventListener('mousemove', (e) => this.onMouseMove(e, this.canvas1, this.joystick1));
-                this.canvas1.removeEventListener('mouseup', (e) => this.onMouseUp(this.joystick1));
-                this.canvas1.removeEventListener('mouseleave', (e) => this.onMouseLeave(this.joystick1));
-                this.canvas1.removeEventListener('mouseenter', (e) => { /* no-op, need original bound function */ });
-                this.canvas1.removeEventListener('touchstart', (e) => this.onMouseDown(e.touches[0], this.canvas1, this.joystick1));
-                this.canvas1.removeEventListener('touchmove', (e) => { e.preventDefault(); this.onMouseMove(e.touches[0], this.canvas1, this.joystick1); });
-                this.canvas1.removeEventListener('touchend', (e) => this.onMouseUp(this.joystick1));
-                this.canvas1.removeEventListener('touchcancel', (e) => this.onMouseUp(this.joystick1));
-            }
-            if (this.canvas2) {
-                this.canvas2.removeEventListener('mousedown', (e) => this.onMouseDown(e, this.canvas2, this.joystick2));
-                this.canvas2.removeEventListener('mousemove', (e) => this.onMouseMove(e, this.canvas2, this.joystick2));
-                this.canvas2.removeEventListener('mouseup', (e) => this.onMouseUp(this.joystick2));
-                this.canvas2.removeEventListener('mouseleave', (e) => this.onMouseLeave(this.joystick2));
-                this.canvas2.removeEventListener('mouseenter', (e) => { /* no-op, need original bound function */ });
-                this.canvas2.removeEventListener('touchstart', (e) => this.onMouseDown(e.touches[0], this.canvas2, this.joystick2));
-                this.canvas2.removeEventListener('touchmove', (e) => { e.preventDefault(); this.onMouseMove(e.touches[0], this.canvas2, this.joystick2); });
-                this.canvas2.removeEventListener('touchend', (e) => this.onMouseUp(this.joystick2));
-                this.canvas2.removeEventListener('touchcancel', (e) => this.onMouseUp(this.joystick2));
-            }
+            // Helper function to remove event listeners for a single joystick
+            const removeJoystickListeners = (canvas, boundHandlersObj) => {
+                if (canvas && boundHandlersObj) {
+                    canvas.removeEventListener('mousedown', boundHandlersObj.mousedown);
+                    canvas.removeEventListener('mousemove', boundHandlersObj.mousemove);
+                    canvas.removeEventListener('mouseup', boundHandlersObj.mouseup);
+                    canvas.removeEventListener('mouseleave', boundHandlersObj.mouseleave);
+                    canvas.removeEventListener('mouseenter', boundHandlersObj.mouseenter);
+                    canvas.removeEventListener('touchstart', boundHandlersObj.touchstart);
+                    canvas.removeEventListener('touchmove', boundHandlersObj.touchmove);
+                    canvas.removeEventListener('touchend', boundHandlersObj.touchend);
+                    canvas.removeEventListener('touchcancel', boundHandlersObj.touchcancel);
+                }
+            };
+
+            removeJoystickListeners(this.canvas1, this.boundHandlers.canvas1);
+            removeJoystickListeners(this.canvas2, this.boundHandlers.canvas2);
+            removeJoystickListeners(this.canvas3, this.boundHandlers.canvas3); // NEW: Remove listeners for third joystick
+
             if (this.maxVelocitySlider) {
                 this.maxVelocitySlider.removeEventListener('input', this.updateMaxVelocity);
             }
-            // A more robust way to remove the resize listener would be to store the bound function in a variable.
-            // For now, if 'this.drawJoystick' was used directly in the add, this should work.
-            window.removeEventListener('resize', () => { /* no-op, need original bound function */ });
+            // Remove the bound resize handler
+            window.removeEventListener('resize', this.boundResizeHandler);
         }
 
         /**
@@ -254,20 +286,23 @@
         updateJointVelocityDisplays() {
             const formatVel = (val) => val.toFixed(1); // Format to one decimal place
             const updateSpan = (span, value, label) => {
-                span.textContent = `${label}: ${formatVel(value)}`;
-                // Add/remove 'zero' class for styling (e.g., grey text for zero, green for non-zero)
-                if (value !== 0) {
-                    span.classList.remove('zero');
-                } else {
-                    span.classList.add('zero');
+                if (span) { // Ensure the span element exists
+                    span.textContent = `${label}: ${formatVel(value)}`;
+                    if (value !== 0) {
+                        span.classList.remove('zero');
+                    } else {
+                        span.classList.add('zero');
+                    }
                 }
             };
 
-            // Update display for all four joints
+            // Update display for all six joints
             updateSpan(this.joint1VelSpan, this.joystick1.currentJoint1Vel, 'J1');
             updateSpan(this.joint2VelSpan, this.joystick1.currentJoint2Vel, 'J2');
             updateSpan(this.joint3VelSpan, this.joystick2.currentJoint3Vel, 'J3');
             updateSpan(this.joint4VelSpan, this.joystick2.currentJoint4Vel, 'J4');
+            updateSpan(this.joint5VelSpan, this.joystick3.currentJoint5Vel, 'J5'); // NEW: Update J5
+            updateSpan(this.joint6VelSpan, this.joystick3.currentJoint6Vel, 'J6'); // NEW: Update J6
         }
 
         /**
@@ -277,15 +312,17 @@
          */
         drawJoystick(canvas, joystickState) {
             const ctx = canvas.getContext('2d');
-            if (!ctx) return; // Ensure context is available
+            if (!ctx) return;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             // Draw outer circle (joystick base)
             ctx.beginPath();
             ctx.arc(joystickState.centerX, joystickState.centerY, this.joystickRadius, 0, Math.PI * 2, false);
+            // These colors will be overridden by CSS if your CSS is theme-aware.
+            // Keeping them here for fallback/direct drawing context, but theme-aware CSS is preferred.
             ctx.strokeStyle = '#666'; // Base border color
-            ctx.lineWidth = 2; // Reduced base border thickness
+            ctx.lineWidth = 2;
             ctx.stroke();
             ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // Semi-transparent base fill
             ctx.fill();
@@ -296,7 +333,7 @@
             ctx.fillStyle = '#f84632'; // Thumb fill color (red)
             ctx.fill();
             ctx.strokeStyle = '#f84632'; // Thumb border color (red)
-            ctx.lineWidth = 1; // Reduced thumb border thickness
+            ctx.lineWidth = 1;
             ctx.stroke();
         }
 
@@ -312,17 +349,15 @@
             let mouseX = event.clientX - rect.left;
             let mouseY = event.clientY - rect.top;
 
-            // Calculate the distance from the mouse click to the center of the joystick thumb
             const dist = Math.sqrt(
                 Math.pow(mouseX - joystickState.thumbX, 2) +
                 Math.pow(mouseY - joystickState.thumbY, 2)
             );
 
-            // Only start dragging if the click is within the thumb's radius (plus a small buffer)
-            if (dist <= this.thumbRadius + 5) { // Added a 5px buffer for easier clicking
+            if (dist <= this.thumbRadius + 5) {
                 joystickState.isDragging = true;
-                canvas.style.cursor = 'grabbing'; // Change cursor to indicate dragging
-                this.updateThumbPosition(event, canvas, joystickState); // Immediately snap to click
+                canvas.style.cursor = 'grabbing';
+                this.updateThumbPosition(event, canvas, joystickState);
             }
         }
 
@@ -333,7 +368,7 @@
          * @param {Object} joystickState The state object for the joystick.
          */
         onMouseMove(event, canvas, joystickState) {
-            if (!joystickState.isDragging) return; // Only process if currently dragging
+            if (!joystickState.isDragging) return;
             this.updateThumbPosition(event, canvas, joystickState);
         }
 
@@ -342,26 +377,35 @@
          * @param {Object} joystickState The state object for the joystick.
          */
         onMouseUp(joystickState) {
-            joystickState.isDragging = false; // Stop dragging
-            // Reset cursor to default, not 'grab', on mouse up
-            if (joystickState === this.joystick1) this.canvas1.style.cursor = 'default';
-            if (joystickState === this.joystick2) this.canvas2.style.cursor = 'default';
+            joystickState.isDragging = false;
+            // Reset cursor to default on mouse up
+            if (joystickState === this.joystick1) this.canvas1.style.cursor = 'grab';
+            if (joystickState === this.joystick2) this.canvas2.style.cursor = 'grab';
+            if (joystickState === this.joystick3) this.canvas3.style.cursor = 'grab'; // NEW: Reset cursor for third joystick
 
-            // Reset thumb to center of the joystick base
+            // Reset thumb to center
             joystickState.thumbX = joystickState.centerX;
             joystickState.thumbY = joystickState.centerY;
-            this.drawJoystick(joystickState === this.joystick1 ? this.canvas1 : this.canvas2, joystickState);
+            this.drawJoystick(
+                joystickState === this.joystick1 ? this.canvas1 :
+                joystickState === this.joystick2 ? this.canvas2 :
+                this.canvas3, // Select correct canvas for joystick3
+                joystickState
+            );
 
-            // Set current joint velocities to zero when joystick is released
+            // Set current joint velocities to zero for the released joystick
             if (joystickState === this.joystick1) {
                 joystickState.currentJoint1Vel = 0;
                 joystickState.currentJoint2Vel = 0;
-            } else {
+            } else if (joystickState === this.joystick2) {
                 joystickState.currentJoint3Vel = 0;
                 joystickState.currentJoint4Vel = 0;
+            } else if (joystickState === this.joystick3) { // NEW: Zero velocities for joystick3
+                joystickState.currentJoint5Vel = 0;
+                joystickState.currentJoint6Vel = 0;
             }
-            this.updateJointVelocityDisplays(); // Update display
-            this.publishJointVelocities(); // Publish zero velocities to ROS
+            this.updateJointVelocityDisplays();
+            this.publishJointVelocities();
         }
 
         /**
@@ -371,11 +415,11 @@
          */
         onMouseLeave(joystickState) {
             if (joystickState.isDragging) {
-                this.onMouseUp(joystickState); // If dragging, treat leaving as mouse up
+                this.onMouseUp(joystickState);
             } else {
-                // If not dragging, simply reset cursor to default when leaving the canvas area
-                if (joystickState === this.joystick1) this.canvas1.style.cursor = 'default';
-                if (joystickState === this.joystick2) this.canvas2.style.cursor = 'default';
+                if (joystickState === this.joystick1) this.canvas1.style.cursor = 'grab';
+                if (joystickState === this.joystick2) this.canvas2.style.cursor = 'grab';
+                if (joystickState === this.joystick3) this.canvas3.style.cursor = 'grab'; // NEW: Reset cursor for third joystick
             }
         }
 
@@ -393,55 +437,48 @@
             let dx = mouseX - joystickState.centerX;
             let dy = mouseY - joystickState.centerY;
 
-            // Determine if horizontal or vertical movement is dominant (for 1-axis control)
-            if (Math.abs(dx) > Math.abs(dy)) {
-                // Dominant horizontal movement (e.g., for Joint 1 or 3)
-                joystickState.thumbY = joystickState.centerY; // Clamp Y to center
-                // Clamp X position within the joystick radius
-                if (Math.abs(dx) > this.joystickRadius) {
-                    joystickState.thumbX = joystickState.centerX + (dx > 0 ? this.joystickRadius : -this.joystickRadius);
-                } else {
-                    joystickState.thumbX = mouseX;
-                }
-            } else {
-                // Dominant vertical movement (e.g., for Joint 2 or 4)
-                joystickState.thumbX = joystickState.centerX; // Clamp X to center
-                // Clamp Y position within the joystick radius
-                if (Math.abs(dy) > this.joystickRadius) {
-                    joystickState.thumbY = joystickState.centerY + (dy > 0 ? this.joystickRadius : -this.joystickRadius);
-                } else {
-                    joystickState.thumbY = mouseY;
-                }
+            // Clamp thumb position within the joystick radius
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > this.joystickRadius) {
+                dx *= this.joystickRadius / dist;
+                dy *= this.joystickRadius / dist;
             }
 
-            this.drawJoystick(canvas, joystickState); // Redraw the joystick with new thumb position
+            joystickState.thumbX = joystickState.centerX + dx;
+            joystickState.thumbY = joystickState.centerY + dy;
+
+
+            this.drawJoystick(canvas, joystickState);
 
             // Calculate normalized values (-1 to 1) based on thumb displacement from center
-            const normalizedX = (joystickState.thumbX - joystickState.centerX) / this.joystickRadius;
-            const normalizedY = -(joystickState.thumbY - joystickState.centerY) / this.joystickRadius; // Y-axis inverted: up is positive
+            const normalizedX = dx / this.joystickRadius;
+            const normalizedY = -dy / this.joystickRadius; // Y-axis inverted: up is positive
 
             // Assign velocities based on which joystick is being moved
+            // IMPORTANT: This logic needs to ensure only the actively dragged joystick
+            // affects its assigned joints, and the other joysticks' values remain as they were,
+            // or are reset to zero if they are not active. The previous logic reset ALL
+            // *other* joystick's values if one was active. This is usually undesirable for 6DOF.
+            // Instead, we only modify the velocities for the joystick currently being dragged.
+            // When a joystick is released (onMouseUp), its velocities are reset to zero.
+
             if (joystickState === this.joystick1) {
                 joystickState.currentJoint1Vel = normalizedX * this.maxVelocity;
                 joystickState.currentJoint2Vel = normalizedY * this.maxVelocity;
-                // Ensure other joystick's velocities are zero if this joystick is active
-                this.joystick2.currentJoint3Vel = 0;
-                this.joystick2.currentJoint4Vel = 0;
-            } else { // joystickState === this.joystick2
-                // Ensure other joystick's velocities are zero if this joystick is active
-                this.joystick1.currentJoint1Vel = 0;
-                this.joystick1.currentJoint2Vel = 0;
+            } else if (joystickState === this.joystick2) {
                 joystickState.currentJoint3Vel = normalizedX * this.maxVelocity;
                 joystickState.currentJoint4Vel = normalizedY * this.maxVelocity;
+            } else if (joystickState === this.joystick3) { // NEW: Handle joystick3 velocities
+                joystickState.currentJoint5Vel = normalizedX * this.maxVelocity;
+                joystickState.currentJoint6Vel = normalizedY * this.maxVelocity;
             }
-            this.updateJointVelocityDisplays(); // Update the displayed velocity values
+            this.updateJointVelocityDisplays();
         }
 
         /**
          * Establishes a connection to the ROS websocket server.
          */
         connectToROS() {
-            // Check if ROSLIB library is available
             if (typeof window.ROSLIB === 'undefined') {
                 console.error("ROSLIB is not defined. Please ensure roslib.min.js is loaded in your index.html.");
                 this.joystickStatus.textContent = 'ROSLIB not found!';
@@ -449,12 +486,10 @@
                 return;
             }
 
-            // Create a new ROS connection instance
             this.ros = new window.ROSLIB.Ros({
-                url: 'ws://localhost:9090' // Default ROS Bridge websocket URL
+                url: 'ws://localhost:9090'
             });
 
-            // Set up event listeners for ROS connection status
             this.ros.on('connection', this.handleRosConnection);
             this.ros.on('error', this.handleRosError);
             this.ros.on('close', this.handleRosClose);
@@ -462,8 +497,8 @@
             // Define the ROS topic for publishing joint velocities
             this.jointVelTopic = new window.ROSLIB.Topic({
                 ros: this.ros,
-                name: '/arm_joint_velocities', // ROS topic name
-                messageType: 'std_msgs/Float64MultiArray' // Message type for an array of double-precision floats
+                name: '/arm_joint_velocities',
+                messageType: 'std_msgs/Float64MultiArray'
             });
         }
 
@@ -476,7 +511,7 @@
             this.joystickStatus.textContent = 'Connected to ROS';
             this.joystickStatus.classList.remove('error');
             this.joystickStatus.classList.add('connected');
-            this.publishJointVelocities(); // Publish initial velocities (likely zero)
+            this.publishJointVelocities();
         }
 
         /**
@@ -505,9 +540,10 @@
             this.joystick1.currentJoint2Vel = 0;
             this.joystick2.currentJoint3Vel = 0;
             this.joystick2.currentJoint4Vel = 0;
-            this.updateJointVelocityDisplays(); // Update display to show zeros
+            this.joystick3.currentJoint5Vel = 0; // NEW: Zero J5
+            this.joystick3.currentJoint6Vel = 0; // NEW: Zero J6
+            this.updateJointVelocityDisplays();
 
-            // Attempt to reconnect after a 3-second delay
             setTimeout(() => {
                 console.log('Attempting to reconnect to ROS...');
                 this.connectToROS();
@@ -519,11 +555,9 @@
          * Publishes every 100ms.
          */
         startContinuousPublishing() {
-            // Clear any existing interval to prevent multiple intervals running
             if (this.publishInterval) {
                 clearInterval(this.publishInterval);
             }
-            // Set up a new interval to call publishJointVelocities every 100ms
             this.publishInterval = setInterval(() => {
                 this.publishJointVelocities();
             }, 100);
@@ -533,33 +567,33 @@
          * Publishes the current joint velocities to the ROS topic.
          */
         publishJointVelocities() {
-            // Only publish if connected to ROS and the topic is defined
             if (!this.rosConnected || !this.jointVelTopic) {
                 return;
             }
 
-            // Create a ROS Float64MultiArray message with the current velocities
+            // Create a ROS Float64MultiArray message with all six current velocities
             const message = new window.ROSLIB.Message({
                 data: [
                     this.joystick1.currentJoint1Vel,
                     this.joystick1.currentJoint2Vel,
                     this.joystick2.currentJoint3Vel,
-                    this.joystick2.currentJoint4Vel
+                    this.joystick2.currentJoint4Vel,
+                    this.joystick3.currentJoint5Vel, // NEW: Include J5
+                    this.joystick3.currentJoint6Vel  // NEW: Include J6
                 ]
             });
 
-            this.jointVelTopic.publish(message); // Publish the message
+            this.jointVelTopic.publish(message);
         }
 
         /**
          * Cleans up resources when the view is destroyed.
-         * This is crucial for preventing memory leaks in Open MCT.
          */
         destroy() {
             console.log('Destroying ArmControlView...');
-            this.removeEventListeners(); // Remove all event listeners
 
-            // Stop continuous publishing interval
+            this.removeEventListeners(); // Call the fixed event listener removal
+
             if (this.publishInterval) {
                 clearInterval(this.publishInterval);
                 this.publishInterval = null;
@@ -571,10 +605,11 @@
                 this.joystick1.currentJoint2Vel = 0;
                 this.joystick2.currentJoint3Vel = 0;
                 this.joystick2.currentJoint4Vel = 0;
+                this.joystick3.currentJoint5Vel = 0; // NEW: Zero J5
+                this.joystick3.currentJoint6Vel = 0; // NEW: Zero J6
                 this.publishJointVelocities();
             }
 
-            // Clean up ROS connection listeners and close if connected
             if (this.ros) {
                 this.ros.off('connection', this.handleRosConnection);
                 this.ros.off('error', this.handleRosError);
@@ -584,11 +619,10 @@
                 }
             }
 
-            // Nullify references to DOM elements and other objects to aid garbage collection
-            this.canvas1 = null;
-            this.ctx1 = null;
-            this.canvas2 = null;
-            this.ctx2 = null;
+            // Nullify DOM references to aid garbage collection
+            this.canvas1 = null; this.ctx1 = null;
+            this.canvas2 = null; this.ctx2 = null;
+            this.canvas3 = null; this.ctx3 = null; // NEW: Nullify third canvas/context
             this.maxVelocitySlider = null;
             this.maxVelocityValueSpan = null;
             this.joystickStatus = null;
@@ -596,13 +630,15 @@
             this.joint2VelSpan = null;
             this.joint3VelSpan = null;
             this.joint4VelSpan = null;
+            this.joint5VelSpan = null; // NEW: Nullify J5 span
+            this.joint6VelSpan = null; // NEW: Nullify J6 span
 
             this.htmlContent = null;
-            this.element.innerHTML = ''; // Clear the inner HTML
+            this.element.innerHTML = ''; // Clear the DOM element
         }
     }
 
-    // Expose the class globally so Open MCT can instantiate it
+    // Expose ArmControlView globally
     window.ArmControlView = ArmControlView;
 
-})();
+})(); // End of IIFE
