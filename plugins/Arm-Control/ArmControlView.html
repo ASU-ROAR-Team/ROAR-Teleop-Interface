@@ -1,33 +1,36 @@
 <div class="arm-robot-control-container">
-    <div class="joysticks-wrapper">
-        <div class="joystick-group">
-            <div class="joystick-canvas-wrapper">
-                <canvas id="joystickCanvas1" class="joystick-canvas"></canvas>
-            </div>
-            </div>
-
-        <div class="joystick-group">
-            <div class="joystick-canvas-wrapper">
-                <canvas id="joystickCanvas2" class="joystick-canvas"></canvas>
-            </div>
-            </div>
-
-        <div class="joystick-group">
-            <div class="joystick-canvas-wrapper">
-                <canvas id="joystickCanvas3" class="joystick-canvas"></canvas>
-            </div>
-        </div>
-    </div>
-
     <div id="joystickStatus" class="joystick-status">
         Not Connected to ROS
     </div>
 
-    <div class="joystick-overall-label">
-        Joystick 1: Joints 1 (L/R) & 2 (U/D) | Joystick 2: Joints 3 (L/R) & 4 (U/D) | Joystick 3: Joints 5 (L/R) & 6 (U/D)
+    <div class="sliders-wrapper">
+        <div class="slider-group">
+            <label for="joint1Slider">Joint 1</label>
+            <input type="range" id="joint1Slider" min="-15" max="15" step="0.5" value="0">
+        </div>
+        <div class="slider-group">
+            <label for="joint2Slider">Joint 2</label>
+            <input type="range" id="joint2Slider" min="-15" max="15" step="0.5" value="0">
+        </div>
+        <div class="slider-group">
+            <label for="joint3Slider">Joint 3</label>
+            <input type="range" id="joint3Slider" min="-15" max="15" step="0.5" value="0">
+        </div>
+        <div class="slider-group">
+            <label for="joint4Slider">Joint 4</label>
+            <input type="range" id="joint4Slider" min="-15" max="15" step="0.5" value="0">
+        </div>
+        <div class="slider-group">
+            <label for="joint5Slider">Joint 5</label>
+            <input type="range" id="joint5Slider" min="-15" max="15" step="0.5" value="0">
+        </div>
+        <div class="slider-group">
+            <label for="joint6Slider">Joint 6</label>
+            <input type="range" id="joint6Slider" min="-15" max="15" step="0.5" value="0">
+        </div>
     </div>
 
-    <h3 class="joint-velocities-header">Current Joint Velocities</h3>
+    <h3 class="joint-velocities-header">Current Joint Velocities (RPM)</h3>
     <div class="joint-display">
         <span id="joint1Vel" class="joint-value zero">J1: 0.0</span>
         <span id="joint2Vel" class="joint-value zero">J2: 0.0</span>
@@ -36,12 +39,4 @@
         <span id="joint5Vel" class="joint-value zero">J5: 0.0</span>
         <span id="joint6Vel" class="joint-value zero">J6: 0.0</span>
     </div>
-
-    <div class="velocity-slider-section">
-        <div class="velocity-control-group">
-            <label for="maxVelocity">Max Joint Velocity:</label>
-            <input type="range" id="maxVelocity" min="0" max="30" step="1" value="15">
-            <span id="maxVelocityValue" class="velocity-value">15</span> RPM
-        </div>
-    </div>
-</div> 
+</div>
