@@ -27,11 +27,25 @@
             this.joint4Slider = null;
             this.joint5Slider = null;
             this.joint6Slider = null;
+            
+            // NEW: Store references to the camera feed elements
+            this.cameraFeed1Img = null;
+            this.cameraFeed2Img = null;
 
             this.ros = null;
             this.jointVelTopic = null;
             this.rosConnected = false;
             this.publishInterval = null;
+
+            // NEW: ROS topics for camera feeds
+            this.camera1Topic = null;
+            this.camera2Topic = null;
+            
+            // NEW: Throttle for camera feed updates to prevent flickering (target ~15 FPS)
+            this.lastCamera1Update = 0;
+            this.lastCamera2Update = 0;
+            // 1000ms / 15fps = ~66ms per frame
+            const THROTTLE_RATE_MS = 66;
 
             // Bind event handlers
             this.updateJointVelocity = this.updateJointVelocity.bind(this);
@@ -40,6 +54,30 @@
             this.handleRosClose = this.handleRosClose.bind(this);
             this.publishJointVelocities = this.publishJointVelocities.bind(this);
             this.boundResizeHandler = this.createBoundResizeHandler();
+
+            // NEW: Bound function to handle camera topic messages with throttling
+            this.handleCamera1Message = (message) => {
+                const now = Date.now();
+                if (now - this.lastCamera1Update < THROTTLE_RATE_MS) {
+                    return; // Skip update if too soon
+                }
+                if (this.cameraFeed1Img && message.data) {
+                    // message.data from CompressedImage is already a Base64 string
+                    this.cameraFeed1Img.src = 'data:image/jpeg;base64,' + message.data;
+                    this.lastCamera1Update = now;
+                }
+            };
+            this.handleCamera2Message = (message) => {
+                const now = Date.now();
+                if (now - this.lastCamera2Update < THROTTLE_RATE_MS) {
+                    return; // Skip update if too soon
+                }
+                if (this.cameraFeed2Img && message.data) {
+                    // message.data from CompressedImage is already a Base64 string
+                    this.cameraFeed2Img.src = 'data:image/jpeg;base64,' + message.data;
+                    this.lastCamera2Update = now;
+                }
+            };
         }
 
         /**
@@ -96,6 +134,10 @@
             this.joint4Slider = this.element.querySelector('#joint4Slider');
             this.joint5Slider = this.element.querySelector('#joint5Slider');
             this.joint6Slider = this.element.querySelector('#joint6Slider');
+            
+            // NEW: Get references to camera feed elements
+            this.cameraFeed1Img = this.element.querySelector('#cameraFeed1');
+            this.cameraFeed2Img = this.element.querySelector('#cameraFeed2');
 
             // Get ROS status element
             this.joystickStatus = this.element.querySelector('#joystickStatus');
@@ -194,7 +236,7 @@
             // Define the ROS topic for publishing joint velocities
             this.jointVelTopic = new window.ROSLIB.Topic({
                 ros: this.ros,
-                name: '/arm_joint_velocities',
+                name: '/arm_joint_target_angles',
                 messageType: 'std_msgs/Float64MultiArray'
             });
         }
@@ -208,6 +250,23 @@
             this.joystickStatus.textContent = 'Connected to ROS';
             this.joystickStatus.classList.remove('error');
             this.joystickStatus.classList.add('connected');
+            
+            // NEW: Subscribe to camera topics after successful connection
+            this.camera1Topic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/camera/color/image_raw1/compressed', // CORRECTED to compressed topic
+                messageType: 'sensor_msgs/CompressedImage' // CORRECTED message type
+            });
+
+            this.camera2Topic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/camera/color/image_raw2/compressed', // CORRECTED to compressed topic
+                messageType: 'sensor_msgs/CompressedImage' // CORRECTED message type
+            });
+            
+            // Listen for image data and update the HTML img elements with throttling
+            this.camera1Topic.subscribe(this.handleCamera1Message);
+            this.camera2Topic.subscribe(this.handleCamera2Message);
         }
 
         /**
@@ -231,6 +290,11 @@
             this.joystickStatus.textContent = 'Disconnected from ROS';
             this.joystickStatus.classList.remove('connected');
             this.joystickStatus.classList.add('error');
+            
+            // NEW: Stop camera feeds on close
+            if (this.camera1Topic) { this.camera1Topic.unsubscribe(); }
+            if (this.camera2Topic) { this.camera2Topic.unsubscribe(); }
+
             // Reset all joint velocities to zero on disconnect
             this.jointVelocities = {
                 joint1: 0, joint2: 0, joint3: 0, joint4: 0, joint5: 0, joint6: 0
@@ -298,6 +362,10 @@
                 });
                 this.jointVelTopic.publish(message);
             }
+            
+            // NEW: Unsubscribe from camera topics before destroying
+            if (this.camera1Topic) { this.camera1Topic.unsubscribe(); }
+            if (this.camera2Topic) { this.camera2Topic.unsubscribe(); }
 
             if (this.ros) {
                 this.ros.off('connection', this.handleRosConnection);
@@ -321,6 +389,12 @@
             this.joint4Slider = null;
             this.joint5Slider = null;
             this.joint6Slider = null;
+            
+            // NEW: Nullify camera feed references
+            this.cameraFeed1Img = null;
+            this.cameraFeed2Img = null;
+            this.camera1Topic = null;
+            this.camera2Topic = null;
 
             this.htmlContent = null;
             this.element.innerHTML = '';

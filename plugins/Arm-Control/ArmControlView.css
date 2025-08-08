@@ -140,6 +140,40 @@
     box-shadow: var(--shadow-small);
 }
 
+/* NEW: Styling for camera feeds */
+.arm-robot-control-container .camera-feeds-wrapper {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    max-width: 800px;
+    background-color: var(--background-color--lvl2);
+    padding: 8px;
+    border-radius: 6px;
+    box-shadow: var(--shadow-small);
+}
+
+.arm-robot-control-container .camera-feed-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: calc(50% - 4px); /* Two feeds side-by-side with a gap */
+    min-width: 250px;
+}
+
+.arm-robot-control-container .camera-feed-image {
+    width: 100%;
+    /* NEW: Use aspect-ratio for a proper 16:9 display */
+    aspect-ratio: 16 / 9;
+    /* object-fit: contain ensures the image fits within the container without cropping or distortion */
+    object-fit: contain; 
+    border: 2px solid var(--border-color--dark);
+    border-radius: 4px;
+    background-color: black;
+}
+
 /* Media queries for smaller screens - adjusted for new slider layout */
 @media (max-width: 768px) {
     .arm-robot-control-container {
@@ -166,5 +200,8 @@
     }
     .arm-robot-control-container .joint-display {
         padding: 4px;
+    }
+    .arm-robot-control-container .camera-feed-container {
+        width: 100%; /* Stack cameras on top of each other */
     }
 }
