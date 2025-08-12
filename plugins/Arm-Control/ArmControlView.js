@@ -1,5 +1,4 @@
 // src/plugins/Arm-Control/ArmControlView.js
-
 // IMPORTANT: Ensure roslib.min.js is loaded BEFORE this script in index.html
 // e.g., <script src="https://static.robotwebtools.org/roslibjs/current/roslib.min.js"></script>
 
@@ -10,8 +9,8 @@
             this.openmct = openmct;
             this.htmlContent = null;
 
-            // Define joint velocities, replacing joystick state
-            this.jointVelocities = {
+            // Define joint values (in degrees)
+            this.jointValues = {
                 joint1: 0,
                 joint2: 0,
                 joint3: 0,
@@ -20,40 +19,59 @@
                 joint6: 0
             };
 
-            // Store references to the slider elements
+            // Track the current mode, default is Forward Kinematics (FK)
+            this.currentMode = 'FK';
+
+            // Store references to UI elements
             this.joint1Slider = null;
             this.joint2Slider = null;
             this.joint3Slider = null;
             this.joint4Slider = null;
             this.joint5Slider = null;
             this.joint6Slider = null;
-            
-            // NEW: Store references to the camera feed elements
+            this.modeSwitchButton = null;
+            this.poseXDisplay = null;
+            this.poseYDisplay = null;
+            this.poseZDisplay = null;
+            this.poseXPlusButton = null;
+            this.poseXMinusButton = null;
+            this.poseYPlusButton = null;
+            this.poseYMinusButton = null;
+            this.poseZPlusButton = null;
+            this.poseZMinusButton = null;
+            this.presetButton1 = null;
+            this.presetButton2 = null;
+            this.presetButton3 = null;
             this.cameraFeed1Img = null;
             this.cameraFeed2Img = null;
+            this.joystickStatus = null;
 
             this.ros = null;
-            this.jointVelTopic = null;
             this.rosConnected = false;
-            this.publishInterval = null;
 
-            // NEW: ROS topics for camera feeds
+            // Declare ROS topics as properties to be initialized later
+            this.jointCommandTopic = null;
+            this.poseCommandTopic = null;
+            this.currentPoseListener = null;
             this.camera1Topic = null;
             this.camera2Topic = null;
-            
-            // NEW: Throttle for camera feed updates to prevent flickering (target ~15 FPS)
+
+            // Throttle for camera feed updates to prevent flickering (target ~15 FPS)
             this.lastCamera1Update = 0;
             this.lastCamera2Update = 0;
-            // 1000ms / 15fps = ~66ms per frame
-            const THROTTLE_RATE_MS = 66;
+            const THROTTLE_RATE_MS = 66; // 1000ms / 15fps = ~66ms per frame
 
-            // Bind event handlers
-            this.updateJointVelocity = this.updateJointVelocity.bind(this);
+            // Bind event handlers to the instance
+            this.handleSliderInput = this.handleSliderInput.bind(this);
             this.handleRosConnection = this.handleRosConnection.bind(this);
             this.handleRosError = this.handleRosError.bind(this);
             this.handleRosClose = this.handleRosClose.bind(this);
-            this.publishJointVelocities = this.publishJointVelocities.bind(this);
             this.boundResizeHandler = this.createBoundResizeHandler();
+            this.toggleMode = this.toggleMode.bind(this);
+            this.publishPoseCommand = this.publishPoseCommand.bind(this);
+            this.publishJointCommand = this.publishJointCommand.bind(this);
+            this.handlePoseUpdate = this.handlePoseUpdate.bind(this);
+            this.handleJointStateUpdate = this.handleJointStateUpdate.bind(this);
 
             // NEW: Bound function to handle camera topic messages with throttling
             this.handleCamera1Message = (message) => {
@@ -62,7 +80,6 @@
                     return; // Skip update if too soon
                 }
                 if (this.cameraFeed1Img && message.data) {
-                    // message.data from CompressedImage is already a Base64 string
                     this.cameraFeed1Img.src = 'data:image/jpeg;base64,' + message.data;
                     this.lastCamera1Update = now;
                 }
@@ -73,23 +90,14 @@
                     return; // Skip update if too soon
                 }
                 if (this.cameraFeed2Img && message.data) {
-                    // message.data from CompressedImage is already a Base64 string
                     this.cameraFeed2Img.src = 'data:image/jpeg;base64,' + message.data;
                     this.lastCamera2Update = now;
                 }
             };
         }
 
-        /**
-         * Creates a bound resize handler to ensure proper `this` context and allow removal.
-         * @returns {function} A function bound to `this` to handle resize events.
-         */
         createBoundResizeHandler() {
-            // With sliders, there's no need to redraw or reset positions on resize.
-            // The only action is to republish velocities.
-            return () => {
-                this.publishJointVelocities();
-            };
+            return () => {};
         }
 
         /**
@@ -119,7 +127,6 @@
          * Initializes UI elements and sets up event listeners.
          */
         initializeUI() {
-            // Get references to joint velocity display spans
             this.joint1VelSpan = this.element.querySelector('#joint1Vel');
             this.joint2VelSpan = this.element.querySelector('#joint2Vel');
             this.joint3VelSpan = this.element.querySelector('#joint3Vel');
@@ -127,91 +134,295 @@
             this.joint5VelSpan = this.element.querySelector('#joint5Vel');
             this.joint6VelSpan = this.element.querySelector('#joint6Vel');
 
-            // Get references to the slider elements
             this.joint1Slider = this.element.querySelector('#joint1Slider');
             this.joint2Slider = this.element.querySelector('#joint2Slider');
             this.joint3Slider = this.element.querySelector('#joint3Slider');
             this.joint4Slider = this.element.querySelector('#joint4Slider');
             this.joint5Slider = this.element.querySelector('#joint5Slider');
             this.joint6Slider = this.element.querySelector('#joint6Slider');
-            
-            // NEW: Get references to camera feed elements
+
+            this.modeSwitchButton = this.element.querySelector('#modeSwitchButton');
+            this.poseXDisplay = this.element.querySelector('#poseX');
+            this.poseYDisplay = this.element.querySelector('#poseY');
+            this.poseZDisplay = this.element.querySelector('#poseZ');
+            this.poseXPlusButton = this.element.querySelector('#poseX-plus');
+            this.poseXMinusButton = this.element.querySelector('#poseX-minus');
+            this.poseYPlusButton = this.element.querySelector('#poseY-plus');
+            this.poseYMinusButton = this.element.querySelector('#poseY-minus');
+            this.poseZPlusButton = this.element.querySelector('#poseZ-plus');
+            this.poseZMinusButton = this.element.querySelector('#poseZ-minus');
+            this.presetButton1 = this.element.querySelector('#presetButton1');
+            this.presetButton2 = this.element.querySelector('#presetButton2');
+            this.presetButton3 = this.element.querySelector('#presetButton3');
             this.cameraFeed1Img = this.element.querySelector('#cameraFeed1');
             this.cameraFeed2Img = this.element.querySelector('#cameraFeed2');
-
-            // Get ROS status element
             this.joystickStatus = this.element.querySelector('#joystickStatus');
 
-            // Add event listeners for each slider
             this.addEventListeners();
-            this.updateJointVelocityDisplays();
-            this.startContinuousPublishing();
+            this.addPresetButtonListeners();
+
+            // Set initial UI state
+            this.updateUIState();
+            this.updateJointValueDisplays();
         }
 
         /**
-         * Adds all event listeners for slider interaction.
+         * Adds all event listeners for sliders and buttons.
          */
         addEventListeners() {
-            // Helper function to add input listener
-            const addSliderListener = (slider, jointName) => {
+            const addSliderListener = (slider) => {
                 if (slider) {
-                    slider.addEventListener('input', () => this.updateJointVelocity(slider, jointName));
+                    slider.addEventListener('input', this.handleSliderInput);
                 }
             };
 
-            addSliderListener(this.joint1Slider, 'joint1');
-            addSliderListener(this.joint2Slider, 'joint2');
-            addSliderListener(this.joint3Slider, 'joint3');
-            addSliderListener(this.joint4Slider, 'joint4');
-            addSliderListener(this.joint5Slider, 'joint5');
-            addSliderListener(this.joint6Slider, 'joint6');
+            addSliderListener(this.joint1Slider);
+            addSliderListener(this.joint2Slider);
+            addSliderListener(this.joint3Slider);
+            addSliderListener(this.joint4Slider);
+            addSliderListener(this.joint5Slider);
+            addSliderListener(this.joint6Slider);
 
-            // Use the bound resize handler for window resize
             window.addEventListener('resize', this.boundResizeHandler);
+
+            // Add event listener for the new mode switch button
+            if (this.modeSwitchButton) {
+                this.modeSwitchButton.addEventListener('click', this.toggleMode);
+            }
+
+            // Add event listeners for pose control buttons
+            if (this.poseXPlusButton) {
+                this.poseXPlusButton.addEventListener('click', () => {
+                    const currentX = parseFloat(this.poseXDisplay.textContent);
+                    this.publishPoseCommand(currentX + 0.01, parseFloat(this.poseYDisplay.textContent), parseFloat(this.poseZDisplay.textContent));
+                });
+            }
+            if (this.poseXMinusButton) {
+                this.poseXMinusButton.addEventListener('click', () => {
+                    const currentX = parseFloat(this.poseXDisplay.textContent);
+                    this.publishPoseCommand(currentX - 0.01, parseFloat(this.poseYDisplay.textContent), parseFloat(this.poseZDisplay.textContent));
+                });
+            }
+            if (this.poseYPlusButton) {
+                this.poseYPlusButton.addEventListener('click', () => {
+                    const currentY = parseFloat(this.poseYDisplay.textContent);
+                    this.publishPoseCommand(parseFloat(this.poseXDisplay.textContent), currentY + 0.01, parseFloat(this.poseZDisplay.textContent));
+                });
+            }
+            if (this.poseYMinusButton) {
+                this.poseYMinusButton.addEventListener('click', () => {
+                    const currentY = parseFloat(this.poseYDisplay.textContent);
+                    this.publishPoseCommand(parseFloat(this.poseXDisplay.textContent), currentY - 0.01, parseFloat(this.poseZDisplay.textContent));
+                });
+            }
+            if (this.poseZPlusButton) {
+                this.poseZPlusButton.addEventListener('click', () => {
+                    const currentZ = parseFloat(this.poseZDisplay.textContent);
+                    this.publishPoseCommand(parseFloat(this.poseXDisplay.textContent), parseFloat(this.poseYDisplay.textContent), currentZ + 0.01);
+                });
+            }
+            if (this.poseZMinusButton) {
+                this.poseZMinusButton.addEventListener('click', () => {
+                    const currentZ = parseFloat(this.poseZDisplay.textContent);
+                    this.publishPoseCommand(parseFloat(this.poseXDisplay.textContent), parseFloat(this.poseYDisplay.textContent), currentZ - 0.01);
+                });
+            }
         }
 
         /**
-         * Removes all event listeners to prevent memory leaks.
+         * Adds the event listeners for the preset buttons.
          */
-        removeEventListeners() {
-            const removeSliderListener = (slider, jointName) => {
-                if (slider) {
-                    slider.removeEventListener('input', () => this.updateJointVelocity(slider, jointName));
+        addPresetButtonListeners() {
+            // Helper function to convert degrees to radians
+            const toRadians = (degrees) => degrees * (Math.PI / 180);
+            
+            if (this.presetButton1) {
+                this.presetButton1.addEventListener('click', () => this.publishJointCommand(
+                    0,
+                    54.97,
+                    59.00,
+                    3.00,
+                    96.00,
+                    0
+                ));
+            }
+            if (this.presetButton2) {
+                this.presetButton2.addEventListener('click', () => this.publishJointCommand(
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ));
+            }
+            if (this.presetButton3) {
+                this.presetButton3.addEventListener('click', () => this.publishJointCommand(
+                    -156.33,
+                    32.03,
+                    57.65,
+                    -3.85,
+                    0,
+                    0
+                ));
+            }
+        }
+
+        /**
+         * Handles slider input events. Publishes joint commands only in FK mode.
+         */
+        handleSliderInput(event) {
+            if (this.currentMode === 'FK' && this.rosConnected) {
+                // Get the updated joint values from the sliders
+                const jointData = [
+                    parseFloat(this.joint1Slider.value),
+                    parseFloat(this.joint2Slider.value),
+                    parseFloat(this.joint3Slider.value),
+                    parseFloat(this.joint4Slider.value),
+                    parseFloat(this.joint5Slider.value),
+                    parseFloat(this.joint6Slider.value),
+                ];
+
+                const jointMessage = new ROSLIB.Message({
+                    data: jointData
+                });
+
+                // Publish the joint commands
+                this.jointCommandTopic.publish(jointMessage);
+
+                // Update the displays directly as we are commanding the joints
+                this.updateJointValueDisplays();
+            }
+        }
+
+        /**
+         * Toggles between FK and IK modes.
+         */
+        toggleMode() {
+            this.currentMode = (this.currentMode === 'FK') ? 'IK' : 'FK';
+            console.log(`Switched to ${this.currentMode} mode.`);
+            this.updateUIState();
+        }
+
+        /**
+         * Updates the UI elements and ROS topic subscriptions based on the current mode.
+         */
+        updateUIState() {
+            const sliders = [this.joint1Slider, this.joint2Slider, this.joint3Slider, this.joint4Slider, this.joint5Slider, this.joint6Slider];
+            const poseButtons = [this.poseXPlusButton, this.poseXMinusButton, this.poseYPlusButton, this.poseYMinusButton, this.poseZPlusButton, this.poseZMinusButton];
+            const presetButtons = [this.presetButton1, this.presetButton2, this.presetButton3];
+            
+            if (this.currentMode === 'FK') {
+                this.modeSwitchButton.textContent = 'Switch to IK Mode';
+
+                // Enable sliders and preset buttons. Disable pose controls.
+                sliders.forEach(slider => slider.disabled = false);
+                presetButtons.forEach(button => button.disabled = false);
+                poseButtons.forEach(button => button.disabled = true);
+                
+                // Subscribe to pose feedback and unsubscribe from joint feedback
+                if (this.currentPoseListener) this.currentPoseListener.subscribe(this.handlePoseUpdate);
+                if (this.jointCommandTopic) this.jointCommandTopic.unsubscribe();
+
+            } else if (this.currentMode === 'IK') {
+                this.modeSwitchButton.textContent = 'Switch to FK Mode';
+
+                // Disable sliders and preset buttons. Enable pose controls.
+                sliders.forEach(slider => slider.disabled = true);
+                presetButtons.forEach(button => button.disabled = true);
+                poseButtons.forEach(button => button.disabled = false);
+                
+                // Subscribe to joint feedback and unsubscribe from pose feedback
+                if (this.jointCommandTopic) this.jointCommandTopic.subscribe(this.handleJointStateUpdate);
+                if (this.currentPoseListener) this.currentPoseListener.unsubscribe();
+            }
+        }
+
+        /**
+         * Publishes a new pose command.
+         */
+        publishPoseCommand(x, y, z) {
+            if (!this.rosConnected || !this.poseCommandTopic || this.currentMode !== 'IK') {
+                return;
+            }
+
+            const poseMessage = new ROSLIB.Message({
+                header: { stamp: { sec: Date.now() / 1000, nanosec: 0 } },
+                pose: {
+                    position: { x: x, y: y, z: z },
+                    orientation: { x: 0, y: 0, z: 0, w: 1 }
                 }
-            };
+            });
+            this.poseCommandTopic.publish(poseMessage);
 
-            removeSliderListener(this.joint1Slider, 'joint1');
-            removeSliderListener(this.joint2Slider, 'joint2');
-            removeSliderListener(this.joint3Slider, 'joint3');
-            removeSliderListener(this.joint4Slider, 'joint4');
-            removeSliderListener(this.joint5Slider, 'joint5');
-            removeSliderListener(this.joint6Slider, 'joint6');
-
-            window.removeEventListener('resize', this.boundResizeHandler);
+            // Update the display immediately in IK mode
+            if (this.poseXDisplay) this.poseXDisplay.textContent = x.toFixed(2);
+            if (this.poseYDisplay) this.poseYDisplay.textContent = y.toFixed(2);
+            if (this.poseZDisplay) this.poseZDisplay.textContent = z.toFixed(2);
         }
 
         /**
-         * Updates the joint velocity based on the slider value.
-         * @param {HTMLInputElement} slider The slider element.
-         * @param {string} jointName The name of the joint ('joint1', 'joint2', etc.).
+         * Publishes a new joint command with six joint values.
          */
-        updateJointVelocity(slider, jointName) {
-            this.jointVelocities[jointName] = parseFloat(slider.value);
-            this.updateJointVelocityDisplays();
+        publishJointCommand(j1, j2, j3, j4, j5, j6) {
+            if (!this.rosConnected || !this.jointCommandTopic) {
+                return;
+            }
+
+            const jointData = [j1, j2, j3, j4, j5, j6];
+
+            const jointMessage = new ROSLIB.Message({
+                data: jointData
+            });
+            this.jointCommandTopic.publish(jointMessage);
+        }
+
+        /**
+         * Handles incoming PoseStamped messages and updates the UI. (Used in FK mode).
+         */
+        handlePoseUpdate(message) {
+            if (this.currentMode === 'FK') {
+                if (this.poseXDisplay) this.poseXDisplay.textContent = message.pose.position.x.toFixed(2);
+                if (this.poseYDisplay) this.poseYDisplay.textContent = message.pose.position.y.toFixed(2);
+                if (this.poseZDisplay) this.poseZDisplay.textContent = message.pose.position.z.toFixed(2);
+            }
+        }
+
+        /**
+         * Handles incoming joint messages and updates the sliders and displays. (Used in IK mode).
+         */
+        handleJointStateUpdate(message) {
+            if (this.currentMode === 'IK') {
+                const sliders = [
+                    this.joint1Slider, this.joint2Slider, this.joint3Slider,
+                    this.joint4Slider, this.joint5Slider, this.joint6Slider
+                ];
+
+                for (let i = 0; i < message.data.length && i < sliders.length; i++) {
+                    // Convert radians to degrees for the UI display/slider values
+                    const positionInDegrees = (message.data[i] * 180 / Math.PI).toFixed(1);
+
+                    if (sliders[i]) {
+                        sliders[i].value = positionInDegrees;
+                        this.jointValues[`joint${i+1}`] = parseFloat(positionInDegrees);
+                    }
+                }
+                this.updateJointValueDisplays();
+            }
         }
 
         /**
          * Updates the displayed joint velocity values.
          */
-        updateJointVelocityDisplays() {
-            const formatVel = (val) => val.toFixed(1);
+        updateJointValueDisplays() {
+            const formatVal = (val) => val.toFixed(1);
 
-            if (this.joint1VelSpan) this.joint1VelSpan.textContent = `J1: ${formatVel(this.jointVelocities.joint1)}`;
-            if (this.joint2VelSpan) this.joint2VelSpan.textContent = `J2: ${formatVel(this.jointVelocities.joint2)}`;
-            if (this.joint3VelSpan) this.joint3VelSpan.textContent = `J3: ${formatVel(this.jointVelocities.joint3)}`;
-            if (this.joint4VelSpan) this.joint4VelSpan.textContent = `J4: ${formatVel(this.jointVelocities.joint4)}`;
-            if (this.joint5VelSpan) this.joint5VelSpan.textContent = `J5: ${formatVel(this.jointVelocities.joint5)}`;
-            if (this.joint6VelSpan) this.joint6VelSpan.textContent = `J6: ${formatVel(this.jointVelocities.joint6)}`;
+            if (this.joint1VelSpan) this.joint1VelSpan.textContent = `J1: ${formatVal(this.jointValues.joint1)}`;
+            if (this.joint2VelSpan) this.joint2VelSpan.textContent = `J2: ${formatVal(this.jointValues.joint2)}`;
+            if (this.joint3VelSpan) this.joint3VelSpan.textContent = `J3: ${formatVal(this.jointValues.joint3)}`;
+            if (this.joint4VelSpan) this.joint4VelSpan.textContent = `J4: ${formatVal(this.jointValues.joint4)}`;
+            if (this.joint5VelSpan) this.joint5VelSpan.textContent = `J5: ${formatVal(this.jointValues.joint5)}`;
+            if (this.joint6VelSpan) this.joint6VelSpan.textContent = `J6: ${formatVal(this.jointValues.joint6)}`;
         }
 
         /**
@@ -232,12 +443,40 @@
             this.ros.on('connection', this.handleRosConnection);
             this.ros.on('error', this.handleRosError);
             this.ros.on('close', this.handleRosClose);
+        }
 
-            // Define the ROS topic for publishing joint velocities
-            this.jointVelTopic = new window.ROSLIB.Topic({
+        /**
+         * Initializes all ROS topics after a successful connection.
+         */
+        initializeTopics() {
+            this.jointCommandTopic = new window.ROSLIB.Topic({
                 ros: this.ros,
-                name: '/arm_joint_target_angles',
+                name: '/robot/joint_command',
                 messageType: 'std_msgs/Float64MultiArray'
+            });
+
+            this.poseCommandTopic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/robot/desired_pose',
+                messageType: 'geometry_msgs/PoseStamped'
+            });
+
+            this.currentPoseListener = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/robot/current_pose',
+                messageType: 'geometry_msgs/PoseStamped'
+            });
+
+            this.camera1Topic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/camera/color/image_raw1/compressed',
+                messageType: 'sensor_msgs/CompressedImage'
+            });
+
+            this.camera2Topic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/camera/color/image_raw2/compressed',
+                messageType: 'sensor_msgs/CompressedImage'
             });
         }
 
@@ -250,28 +489,20 @@
             this.joystickStatus.textContent = 'Connected to ROS';
             this.joystickStatus.classList.remove('error');
             this.joystickStatus.classList.add('connected');
-            
-            // NEW: Subscribe to camera topics after successful connection
-            this.camera1Topic = new window.ROSLIB.Topic({
-                ros: this.ros,
-                name: '/camera/color/image_raw1/compressed', // CORRECTED to compressed topic
-                messageType: 'sensor_msgs/CompressedImage' // CORRECTED message type
-            });
 
-            this.camera2Topic = new window.ROSLIB.Topic({
-                ros: this.ros,
-                name: '/camera/color/image_raw2/compressed', // CORRECTED to compressed topic
-                messageType: 'sensor_msgs/CompressedImage' // CORRECTED message type
-            });
-            
-            // Listen for image data and update the HTML img elements with throttling
+            // Initialize all topics once after connection
+            this.initializeTopics();
+
+            // Set up initial subscriptions based on the default FK mode
+            this.updateUIState();
+
+            // Subscribe to camera topics
             this.camera1Topic.subscribe(this.handleCamera1Message);
             this.camera2Topic.subscribe(this.handleCamera2Message);
         }
 
         /**
          * Handles ROS connection errors.
-         * @param {Error} error The error object.
          */
         handleRosError(error) {
             console.error('Error connecting to ROS websocket server: ', error);
@@ -282,7 +513,7 @@
         }
 
         /**
-         * Handles ROS connection closure. Attempts to reconnect after a delay.
+         * Handles ROS connection closure.
          */
         handleRosClose() {
             console.log('Connection to ROS websocket server closed.');
@@ -290,16 +521,19 @@
             this.joystickStatus.textContent = 'Disconnected from ROS';
             this.joystickStatus.classList.remove('connected');
             this.joystickStatus.classList.add('error');
-            
-            // NEW: Stop camera feeds on close
+
+            // Unsubscribe from all topics on close
+            if (this.currentPoseListener) { this.currentPoseListener.unsubscribe(); }
+            if (this.jointCommandTopic) { this.jointCommandTopic.unsubscribe(); }
+            if (this.poseCommandTopic) { this.poseCommandTopic.unsubscribe(); }
             if (this.camera1Topic) { this.camera1Topic.unsubscribe(); }
             if (this.camera2Topic) { this.camera2Topic.unsubscribe(); }
 
-            // Reset all joint velocities to zero on disconnect
-            this.jointVelocities = {
+            // Reset all joint values to zero on disconnect
+            this.jointValues = {
                 joint1: 0, joint2: 0, joint3: 0, joint4: 0, joint5: 0, joint6: 0
             };
-            this.updateJointVelocityDisplays();
+            this.updateJointValueDisplays();
 
             setTimeout(() => {
                 console.log('Attempting to reconnect to ROS...');
@@ -308,62 +542,14 @@
         }
 
         /**
-         * Starts a continuous interval for publishing joint velocities to ROS.
-         * Publishes every 100ms.
-         */
-        startContinuousPublishing() {
-            if (this.publishInterval) {
-                clearInterval(this.publishInterval);
-            }
-            this.publishInterval = setInterval(() => {
-                this.publishJointVelocities();
-            }, 100);
-        }
-
-        /**
-         * Publishes the current joint velocities to the ROS topic.
-         */
-        publishJointVelocities() {
-            if (!this.rosConnected || !this.jointVelTopic) {
-                return;
-            }
-
-            // Create a ROS Float64MultiArray message with all six current velocities
-            const message = new window.ROSLIB.Message({
-                data: [
-                    this.jointVelocities.joint1,
-                    this.jointVelocities.joint2,
-                    this.jointVelocities.joint3,
-                    this.jointVelocities.joint4,
-                    this.jointVelocities.joint5,
-                    this.jointVelocities.joint6
-                ]
-            });
-
-            this.jointVelTopic.publish(message);
-        }
-
-        /**
          * Cleans up resources when the view is destroyed.
          */
         destroy() {
             console.log('Destroying ArmControlView...');
-            this.removeEventListeners();
-
-            if (this.publishInterval) {
-                clearInterval(this.publishInterval);
-                this.publishInterval = null;
-            }
-
-            if (this.rosConnected && this.jointVelTopic) {
-                // Publish zero velocities one last time before destroying
-                const message = new window.ROSLIB.Message({
-                    data: [0, 0, 0, 0, 0, 0]
-                });
-                this.jointVelTopic.publish(message);
-            }
-            
-            // NEW: Unsubscribe from camera topics before destroying
+            // Unsubscribe from all topics before destroying
+            if (this.currentPoseListener) { this.currentPoseListener.unsubscribe(); }
+            if (this.jointCommandTopic) { this.jointCommandTopic.unsubscribe(); }
+            if (this.poseCommandTopic) { this.poseCommandTopic.unsubscribe(); }
             if (this.camera1Topic) { this.camera1Topic.unsubscribe(); }
             if (this.camera2Topic) { this.camera2Topic.unsubscribe(); }
 
@@ -375,28 +561,7 @@
                     this.ros.close();
                 }
             }
-
-            this.joystickStatus = null;
-            this.joint1VelSpan = null;
-            this.joint2VelSpan = null;
-            this.joint3VelSpan = null;
-            this.joint4VelSpan = null;
-            this.joint5VelSpan = null;
-            this.joint6VelSpan = null;
-            this.joint1Slider = null;
-            this.joint2Slider = null;
-            this.joint3Slider = null;
-            this.joint4Slider = null;
-            this.joint5Slider = null;
-            this.joint6Slider = null;
-            
-            // NEW: Nullify camera feed references
-            this.cameraFeed1Img = null;
-            this.cameraFeed2Img = null;
-            this.camera1Topic = null;
-            this.camera2Topic = null;
-
-            this.htmlContent = null;
+            // Nullify all references for garbage collection
             this.element.innerHTML = '';
         }
     }
