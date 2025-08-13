@@ -245,6 +245,20 @@
                     96.00,
                     0
                 ));
+                this.joint1Slider.value = 0.0;
+                this.joint2Slider.value = 54.97;
+                this.joint3Slider.value = 59.0;
+                this.joint4Slider.value = 3.0;
+                this.joint5Slider.value = 96.0;
+                this.joint6Slider.value = 0.0;
+                this.jointValues.joint1 = 0;
+                this.jointValues.joint2 = 54.97;
+                this.jointValues.joint3 = 59.0;
+                this.jointValues.joint4 = 3.0;
+                this.jointValues.joint5 = 96.0;
+                this.jointValues.joint6 = 0.0;
+                this.updateJointValueDisplays();
+            
             }
             if (this.presetButton2) {
                 this.presetButton2.addEventListener('click', () => this.publishJointCommand(
@@ -255,6 +269,20 @@
                     0.0,
                     0.0
                 ));
+                this.joint1Slider.value = 0.0;
+                this.joint2Slider.value = 0.0;
+                this.joint3Slider.value = 0.0;
+                this.joint4Slider.value = 0.0;
+                this.joint5Slider.value = 0.0;
+                this.joint6Slider.value = 0.0;
+
+                this.jointValues.joint1 = 0;
+                this.jointValues.joint2 = 0;
+                this.jointValues.joint3 = 0;
+                this.jointValues.joint4 = 0;
+                this.jointValues.joint5 = 0;
+                this.jointValues.joint6 = 0;
+                this.updateJointValueDisplays();
             }
             if (this.presetButton3) {
                 this.presetButton3.addEventListener('click', () => this.publishJointCommand(
@@ -265,11 +293,28 @@
                     0,
                     0
                 ));
+                this.joint1Slider.value = -156.33;
+                this.joint2Slider.value = 32.03;
+                this.joint3Slider.value = 57.65;
+                this.joint4Slider.value = -3.85;
+                this.joint5Slider.value = 0;
+                this.joint6Slider.value = 0;
+
+                this.jointValues.joint1 = -156.33;
+                this.jointValues.joint2 = 32.03;
+                this.jointValues.joint3 = 57.65;
+                this.jointValues.joint4 = -3.85;
+                this.jointValues.joint5 = 0;
+                this.jointValues.joint6 = 0;
+                this.updateJointValueDisplays();
             }
         }
 
         /**
          * Handles slider input events. Publishes joint commands only in FK mode.
+         * The message type is now PoseStamped, which requires a forward kinematics
+         * calculation to get the end-effector position. This code provides
+         * placeholder values for demonstration.
          */
         handleSliderInput(event) {
             if (this.currentMode === 'FK' && this.rosConnected) {
@@ -283,12 +328,36 @@
                     parseFloat(this.joint6Slider.value),
                 ];
 
-                const jointMessage = new ROSLIB.Message({
-                    data: jointData
+                // TODO: Implement forward kinematics to calculate x, y, z from jointData.
+                // For now, we will publish a PoseStamped with placeholder values
+                // to match the requested message type.
+                const poseMessage = new ROSLIB.Message({
+                    header: {
+                        stamp: {
+                            sec: Math.floor(Date.now() / 1000),
+                            nanosec: (Date.now() % 1000) * 1e6
+                        },
+                        frame_id: 'base_link'
+                    },
+                    pose: {
+                        position: {
+                            // These values would be the result of your FK calculation
+                            x: jointData[0],
+                            y: jointData[1],
+                            z: jointData[2]
+                        },
+                        orientation: {
+                            // Placeholder for a default orientation (no rotation)
+                            x: jointData[3],
+                            y: jointData[4],
+                            z: jointData[5],
+                            w: 1
+                        }
+                    }
                 });
 
                 // Publish the joint commands
-                this.jointCommandTopic.publish(jointMessage);
+                this.jointCommandTopic.publish(poseMessage);
 
                 // Update the displays directly as we are commanding the joints
                 this.updateJointValueDisplays();
@@ -362,19 +431,44 @@
         }
 
         /**
-         * Publishes a new joint command with six joint values.
+         * Publishes a new joint command with six joint values as a PoseStamped message.
+         * The message contains placeholder values for position and orientation.
          */
         publishJointCommand(j1, j2, j3, j4, j5, j6) {
             if (!this.rosConnected || !this.jointCommandTopic) {
                 return;
             }
 
-            const jointData = [j1, j2, j3, j4, j5, j6];
+            // The joint data is not directly used in the PoseStamped message,
+            // but is logged for reference.
+            console.log(`Publishing preset joint values: J1:${j1}, J2:${j2}, J3:${j3}, J4:${j4}, J5:${j5}, J6:${j6}`);
 
-            const jointMessage = new ROSLIB.Message({
-                data: jointData
+            // TODO: A real implementation would calculate the end-effector pose
+            // from these joint values using forward kinematics.
+            const poseMessage = new ROSLIB.Message({
+                header: {
+                    stamp: {
+                        sec: Math.floor(Date.now() / 1000),
+                        nanosec: (Date.now() % 1000) * 1e6
+                    },
+                    frame_id: 'base_link'
+                },
+                pose: {
+                    position: {
+                        x: j1,
+                        y: j2,
+                        z: j3
+                    },
+                    orientation: {
+                        x: j4,
+                        y: j5,
+                        z: j6,
+                        w: 0
+                    }
+                }
             });
-            this.jointCommandTopic.publish(jointMessage);
+
+            this.jointCommandTopic.publish(poseMessage);
         }
 
         /**
@@ -393,20 +487,34 @@
          */
         handleJointStateUpdate(message) {
             if (this.currentMode === 'IK') {
-                const sliders = [
-                    this.joint1Slider, this.joint2Slider, this.joint3Slider,
-                    this.joint4Slider, this.joint5Slider, this.joint6Slider
-                ];
+                // const sliders = [
+                //     this.joint1Slider, this.joint2Slider, this.joint3Slider,
+                //     this.joint4Slider, this.joint5Slider, this.joint6Slider
+                // ];
 
-                for (let i = 0; i < message.data.length && i < sliders.length; i++) {
-                    // Convert radians to degrees for the UI display/slider values
-                    const positionInDegrees = (message.data[i] * 180 / Math.PI).toFixed(1);
+                // for (let i = 0; i < message.data.length && i < sliders.length; i++) {
+                //     // Convert radians to degrees for the UI display/slider values
+                //     const positionInDegrees = (message.data[i] * 180 / Math.PI).toFixed(1);
 
-                    if (sliders[i]) {
-                        sliders[i].value = positionInDegrees;
-                        this.jointValues[`joint${i+1}`] = parseFloat(positionInDegrees);
-                    }
-                }
+                //     if (sliders[i]) {
+                //         sliders[i].value = positionInDegrees;
+                //         this.jointValues[`joint${i+1}`] = parseFloat(positionInDegrees);
+                //     }
+                // }
+
+                this.joint1Slider.value = message.pose.position.x.toFixed(1);
+                this.joint2Slider.value = message.pose.position.y.toFixed(1);
+                this.joint3Slider.value = message.pose.position.z.toFixed(1);
+                this.joint4Slider.value = message.pose.orientation.x.toFixed(1);
+                this.joint5Slider.value = message.pose.orientation.y.toFixed(1);
+                this.joint6Slider.value = message.pose.orientation.z.toFixed(1);
+
+                this.jointValues[`joint${1}`] = parseFloat(this.joint1Slider.value);
+                this.jointValues[`joint${2}`] = parseFloat(this.joint2Slider.value);
+                this.jointValues[`joint${3}`] = parseFloat(this.joint3Slider.value);
+                this.jointValues[`joint${4}`] = parseFloat(this.joint4Slider.value);
+                this.jointValues[`joint${5}`] = parseFloat(this.joint5Slider.value);
+                this.jointValues[`joint${6}`] = parseFloat(this.joint6Slider.value);
                 this.updateJointValueDisplays();
             }
         }
@@ -449,10 +557,11 @@
          * Initializes all ROS topics after a successful connection.
          */
         initializeTopics() {
+            // Updated to publish a PoseStamped message on /robot/joint_command
             this.jointCommandTopic = new window.ROSLIB.Topic({
                 ros: this.ros,
                 name: '/robot/joint_command',
-                messageType: 'std_msgs/Float64MultiArray'
+                messageType: 'geometry_msgs/PoseStamped'
             });
 
             this.poseCommandTopic = new window.ROSLIB.Topic({
