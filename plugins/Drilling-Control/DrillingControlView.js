@@ -37,7 +37,7 @@
             this.webcamStatusMessageElement = null;
             this.webcamSnapshotButton = null;
 
-            // Bind methods
+            // Bind methods to ensure 'this' context is correct
             this.handleRosConnection = this.handleRosConnection.bind(this);
             this.handleRosError = this.handleRosError.bind(this);
             this.handleRosClose = this.handleRosClose.bind(this);
@@ -46,6 +46,8 @@
             this.handleManualButtonClick = this.handleManualButtonClick.bind(this);
             this.handleEditModeChange = this.handleEditModeChange.bind(this);
             this.takeWebcamSnapshot = this.takeWebcamSnapshot.bind(this);
+            this.startDrillingService = this.startDrillingService.bind(this); 
+            this.stopDrillingService = this.stopDrillingService.bind(this); 
         }
 
         render() {
@@ -94,9 +96,11 @@
         }
 
         addEventListeners() {
+            // "Start Automatic" and "Stop & Manual" buttons
             this.startAutoButton.addEventListener('click', this.startDrillingService);
             this.stopSequenceButton.addEventListener('click', this.stopDrillingService);
 
+            // Platform Up/Down: Momentary buttons (hold to activate)
             const addMomentaryListener = (button, command) => {
                 if (button) {
                     button.addEventListener('mousedown', () => this.handleManualButtonClick(command, true));
@@ -104,13 +108,19 @@
                     button.addEventListener('mouseleave', () => this.handleManualButtonClick(command, false));
                 }
             };
-            
             addMomentaryListener(this.platformUpButton, 'manualUp');
             addMomentaryListener(this.platformDownButton, 'manualDown');
-            addMomentaryListener(this.augerOnButton, 'augerOn');
-            addMomentaryListener(this.augerOffButton, 'augerOff');
-            addMomentaryListener(this.gateOpenButton, 'gateOpen');
-            addMomentaryListener(this.gateCloseButton, 'gateClose');
+
+            // Auger and Gate: Toggle buttons (click to activate/deactivate)
+            const addClickListener = (button, command, value) => {
+                if (button) {
+                    button.addEventListener('click', () => this.handleManualButtonClick(command, value));
+                }
+            };
+            addClickListener(this.augerOnButton, 'auger', true);
+            addClickListener(this.augerOffButton, 'auger', false);
+            addClickListener(this.gateOpenButton, 'gate', true);
+            addClickListener(this.gateCloseButton, 'gate', false);
 
             // Add webcam snapshot button listener
             if (this.webcamSnapshotButton) {
@@ -150,28 +160,25 @@
             console.log("Published Drilling Command:", drillingMessage);
         }
 
-        handleManualButtonClick(commandType, isPressed) {
+        handleManualButtonClick(commandType, value) {
+            // Reset manualUp and manualDown for momentary control
             this.currentManualState.manualUp = false;
             this.currentManualState.manualDown = false;
             
-            if (commandType === 'manualUp' && isPressed) {
-                this.currentManualState.manualUp = true;
-            } else if (commandType === 'manualDown' && isPressed) {
-                this.currentManualState.manualDown = true;
-            } else if (commandType === 'augerOn' && isPressed) {
-                this.currentManualState.augerOn = true;
-            } else if (commandType === 'augerOff' && isPressed) {
-                this.currentManualState.augerOn = false;
-            } else if (commandType === 'gateOpen' && isPressed) {
-                this.currentManualState.gateOpen = true;
-            } else if (commandType === 'gateClose' && isPressed) {
-                this.currentManualState.gateClose = false;
+            if (commandType === 'manualUp') {
+                this.currentManualState.manualUp = value; // value is true/false based on mousedown/mouseup
+            } else if (commandType === 'manualDown') {
+                this.currentManualState.manualDown = value; // value is true/false based on mousedown/mouseup
+            } else if (commandType === 'auger') {
+                this.currentManualState.augerOn = value; // value is true for AugerOn, false for AugerOff
+            } else if (commandType === 'gate') {
+                this.currentManualState.gateOpen = value; // value is true for GateOpen, false for GateClose
             }
             
             this.sendDrillingCommand(this.currentManualState);
         }
 
-        startDrillingService = () => {
+        startDrillingService() { 
             if (!this.rosConnected) {
                 console.warn('ROS is not connected. Cannot start drilling service.');
                 return;
@@ -192,22 +199,35 @@
             }, (error) => {
                 console.error('Error calling start_module service:', error);
             });
-        };
+        }
         
-        stopDrillingService = () => {
-             this.sendDrillingCommand({
-                 targetHeightCm: 0.0,
-                 augerOn: false,
-                 gateOpen: true,
-                 manualUp: false,
-                 manualDown: false
-             });
-             console.log('Drilling sequence manually stopped.');
-        };
+        // Calls the new /stop_module ROS service (std_srvs/Trigger)
+        stopDrillingService() { 
+             if (!this.rosConnected) {
+                console.warn('ROS is not connected. Cannot stop drilling service.');
+                return;
+            }
+            const stopService = new ROSLIB.Service({
+                ros: this.ros,
+                name: '/stop_module', // New service name
+                messageType: 'std_srvs/Trigger' // Service type for simple trigger
+            });
+            const request = new ROSLIB.ServiceRequest({});
+
+            stopService.callService(request, (result) => {
+                if (result.success) {
+                    console.log('Drilling sequence stop request sent successfully.');
+                } else {
+                    console.error('Failed to send stop drilling sequence request:', result.message);
+                }
+            }, (error) => {
+                console.error('Error calling /stop_module service:', error);
+            });
+        }
 
         connectToROS() {
             if (typeof window.ROSLIB === 'undefined') {
-                console.error("ROSLIB is not defined.");
+                console.error("ROSLIB is not defined. Ensure ros-lib.js is loaded.");
                 this.updateRosStatus(false);
                 return;
             }
@@ -248,7 +268,7 @@
         }
 
         handleRosClose() {
-            console.warn('ROS connection closed.');
+            console.warn('ROS connection closed. Attempting to reconnect...');
             this.updateRosStatus(false);
             if (this.drillingStatusSubscriber) {
                 this.drillingStatusSubscriber.unsubscribe();
@@ -257,19 +277,19 @@
                 this.fsmStateSubscriber.unsubscribe();
             }
             setTimeout(() => {
-                console.log('Attempting to reconnect...');
                 this.connectToROS();
-            }, 3000);
+            }, 3000); // Attempt to reconnect after 3 seconds
         }
         
         handleDrillingStatus(message) {
+            // Display absolute height for user readability (platform depth is usually positive)
             const positiveHeight = Math.abs(message.current_height);
             this.platformDepthDisplay.textContent = positiveHeight.toFixed(1);
             this.sampleWeightDisplay.textContent = message.current_weight.toFixed(0);
         }
         
         handleFsmState(message) {
-            this.fsmStateDisplay.textContent = message.data;
+            this.fsmStateDisplay.textContent = message.data; // Update FSM state display
         }
 
         updateRosStatus(isConnected, message = '') {
@@ -317,7 +337,7 @@
                 this.webcamVideoElement.style.display = 'block';
                 this.hideWebcamStatus();
                 if (this.webcamSnapshotButton) {
-                    this.webcamSnapshotButton.style.display = 'flex'; // Make button visible
+                    this.webcamSnapshotButton.style.display = 'flex'; // Make button visible (flex for centering inner circle)
                 }
                 console.log('Webcam stream started.');
             } catch (err) {
@@ -394,13 +414,13 @@
             this.stopWebcam();
             if (this.webcamSnapshotButton) {
                 this.webcamSnapshotButton.removeEventListener('click', this.takeWebcamSnapshot);
-                this.webcamSnapshotButton.removeEventListener('mousedown', () => {});
-                this.webcamSnapshotButton.removeEventListener('mouseup', () => {});
-                this.webcamSnapshotButton.removeEventListener('mouseleave', () => {});
+                this.webcamSnapshotButton.removeEventListener('mousedown', () => {}); // Remove anonymous functions
+                this.webcamSnapshotButton.removeEventListener('mouseup', () => {});   // This requires named functions or
+                this.webcamSnapshotButton.removeEventListener('mouseleave', () => {});// careful management if kept anonymous.
             }
             this.openmct.editor.off('isEditing', this.handleEditModeChange); // Remove editor listener
 
-            this.element.innerHTML = '';
+            this.element.innerHTML = ''; // Clear the DOM element
         }
     }
 

@@ -8,7 +8,7 @@
     <div class="controls-grid">
         <div class="control-section" id="webcam-container">
             <h2 class="section-header">Live Webcam</h2>
-            <!-- Webcam elements added here -->
+            <!-- Webcam elements integrated directly here -->
             <div class="webcam-feed-wrapper">
                 <video id="webcamVideo" autoplay playsinline></video>
                 <div id="webcamStatusMessage" class="webcam-status-message"></div>
@@ -19,12 +19,12 @@
         </div>
 
         <div class="control-section">
-            <h2 class="section-header">Autonomous Control</h2>
+            <h2 class="section-header">Control Mode</h2>
             <div class="control-buttons">
-                <button id="startAutoButton" class="control-button">Start Sequence</button>
-                <button id="stopSequenceButton" class="control-button danger">Stop Sequence</button>
+                <button id="startAutoButton" class="control-button">Start Automatic</button>
+                <button id="stopSequenceButton" class="control-button danger">Stop & Manual</button>
             </div>
-            <p>Use these buttons to start and stop the automatic drilling sequence, which handles all phases from descending to sampling and ascending.</p>
+            <p>Use "Start Automatic" to begin the full drilling sequence. Use "Stop & Manual" to immediately stop the autonomous sequence and enable direct manual control.</p>
         </div>
 
         <div class="control-section">
@@ -37,6 +37,7 @@
                 <button id="gateOpenButton" class="control-button">Gate Open</button>
                 <button id="gateCloseButton" class="control-button danger">Gate Close</button>
             </div>
+            <p>These controls directly command the rig. They are active when the system is in "IDLE" state.</p>
         </div>
 
         <div class="control-section">
