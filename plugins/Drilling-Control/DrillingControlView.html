@@ -1,0 +1,59 @@
+<div class="drilling-control-container">
+    <div class="status-bar">
+        <div id="rosStatusDot" class="status-dot"></div>
+        <div id="rosStatus">Disconnected</div>
+        <div id="fsmState">IDLE</div>
+    </div>
+
+    <div class="controls-grid">
+        <div class="control-section" id="webcam-container">
+            <h2 class="section-header">Live Webcam</h2>
+            <!-- Webcam elements added here -->
+            <div class="webcam-feed-wrapper">
+                <video id="webcamVideo" autoplay playsinline></video>
+                <div id="webcamStatusMessage" class="webcam-status-message"></div>
+                <button id="snapshotButton" class="snapshot-button">
+                    <div class="snapshot-inner-circle"></div>
+                </button>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h2 class="section-header">Autonomous Control</h2>
+            <div class="control-buttons">
+                <button id="startAutoButton" class="control-button">Start Sequence</button>
+                <button id="stopSequenceButton" class="control-button danger">Stop Sequence</button>
+            </div>
+            <p>Use these buttons to start and stop the automatic drilling sequence, which handles all phases from descending to sampling and ascending.</p>
+        </div>
+
+        <div class="control-section">
+            <h2 class="section-header">Manual Control</h2>
+            <div class="control-buttons">
+                <button id="platformUpButton" class="control-button">Platform Up</button>
+                <button id="platformDownButton" class="control-button">Platform Down</button>
+                <button id="augerOnButton" class="control-button">Auger On</button>
+                <button id="augerOffButton" class="control-button danger">Auger Off</button>
+                <button id="gateOpenButton" class="control-button">Gate Open</button>
+                <button id="gateCloseButton" class="control-button danger">Gate Close</button>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h2 class="section-header">Live Telemetry</h2>
+            <p>Monitors current depth and sample weight.</p>
+            <div class="telemetry-display">
+                <div class="telemetry-item">
+                    <h3>Platform Depth</h3>
+                    <span id="platformDepth">0.0</span>
+                    <span>cm</span>
+                </div>
+                <div class="telemetry-item">
+                    <h3>Sample Weight</h3>
+                    <span id="sampleWeight">0</span>
+                    <span>g</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

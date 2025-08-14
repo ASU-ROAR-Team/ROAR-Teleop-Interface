@@ -1,0 +1,276 @@
+/* src/plugins/Drilling-Control/DrillingControlView.css */
+
+/* Main container for the entire drilling control interface */
+.drilling-control-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 20px;
+    background-color: #f9fafb;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    font-family: 'Inter', sans-serif;
+    color: #333;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    gap: 20px;
+}
+
+/* Style for section headers */
+.section-header {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #1a202c;
+}
+
+/* Status bar for ROS connection and FSM state */
+.status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 800px;
+    background-color: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    font-weight: bold;
+    color: #333;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #ccc;
+    margin-right: 10px;
+}
+
+.status-dot.connected {
+    background-color: #4caf50;
+}
+
+.status-dot.error {
+    background-color: #f44336;
+}
+
+#rosStatus {
+    flex-grow: 1;
+    text-align: left;
+    font-size: 0.9em;
+}
+
+#fsmState {
+    font-size: 0.9em;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: white;
+    background-color: #3498db;
+    transition: background-color 0.3s;
+}
+
+/* Layout for controls and telemetry displays */
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    width: 100%;
+    max-width: 800px;
+}
+
+/* Individual container for controls */
+.control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 15px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Styling for buttons */
+.control-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.control-button {
+    background-color: #3498db;
+    color: white;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.control-button.warning {
+    background-color: #f39c12;
+}
+
+.control-button.danger {
+    background-color: #e74c3c;
+}
+
+.control-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.control-button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Telemetry display section */
+.telemetry-display {
+    display: flex;
+    justify-content: space-around;
+    gap: 20px;
+}
+
+.telemetry-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    background-color: #fafafa;
+}
+
+.telemetry-item h3 {
+    font-size: 1.2rem;
+    margin: 0;
+    color: #555;
+}
+
+.telemetry-item span {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #4a90e2;
+}
+
+/* --- Webcam Specific Styles --- */
+.webcam-feed-wrapper {
+    position: relative;
+    width: 100%;
+    padding-top: 75%; /* 4:3 Aspect Ratio (height / width * 100%) for video */
+    background-color: #333;
+    border-radius: 8px;
+    overflow: hidden; /* Ensure video and controls stay within bounds */
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.3); /* Inner shadow for a framed look */
+}
+
+#webcamVideo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Keep aspect ratio, letterbox if needed */
+    background-color: #333; /* Fallback background */
+    display: block; /* Ensure it takes up space */
+}
+
+.webcam-status-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 10;
+    font-size: 14px;
+    text-align: center;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.7); /* Dark semi-transparent background */
+}
+
+.webcam-status-message.info {
+    background-color: rgba(92, 184, 92, 0.9); /* Green */
+}
+
+.webcam-status-message.error {
+    background-color: rgba(217, 83, 79, 0.9); /* Red */
+}
+
+.webcam-status-message.warning {
+    background-color: rgba(240, 173, 78, 0.9); /* Orange */
+    color: black;
+}
+
+.snapshot-button {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 60px;
+    background-color: transparent;
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    display: none; /* Hidden until stream starts */
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    outline: none;
+    transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+    display: flex; /* Use flexbox to center inner circle */
+    justify-content: center;
+    align-items: center;
+}
+
+.snapshot-button:active {
+    transform: translateX(-50%) scale(0.95);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.snapshot-inner-circle {
+    width: 45px;
+    height: 45px;
+    background-color: white;
+    border-radius: 50%;
+}
+
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+    .drilling-control-container {
+        padding: 10px;
+        gap: 15px;
+    }
+
+    .status-bar {
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+    }
+
+    #rosStatus {
+        text-align: center;
+        margin-right: 0;
+    }
+
+    .controls-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .telemetry-display {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .webcam-feed-wrapper {
+        padding-top: 60%; /* Adjust aspect ratio for smaller screens if needed */
+    }
+}
