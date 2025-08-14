@@ -244,7 +244,7 @@
             this.drillingCommandPublisher = new window.ROSLIB.Topic({
                 ros: this.ros,
                 name: '/drilling_command',
-                messageType: 'roar_msgs/Drilling'
+                messageType: 'roar_msgs/DrillingCommand' // <--- Changed here!
             });
 
             this.drillingStatusSubscriber = new window.ROSLIB.Topic({
