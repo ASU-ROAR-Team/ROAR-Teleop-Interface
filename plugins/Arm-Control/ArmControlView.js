@@ -245,12 +245,12 @@
                     96.00,
                     0
                 ));
-                this.joint1Slider.value = 0.0;
-                this.joint2Slider.value = 54.97;
-                this.joint3Slider.value = 59.0;
-                this.joint4Slider.value = 3.0;
-                this.joint5Slider.value = 96.0;
-                this.joint6Slider.value = 0.0;
+                this.joint1Slider.value = 0.0.toFixed(2);
+                this.joint2Slider.value = 54.97.toFixed(2);
+                this.joint3Slider.value = 59.0.toFixed(2);
+                this.joint4Slider.value = 3.0.toFixed(2);
+                this.joint5Slider.value = 96.0.toFixed(2);
+                this.joint6Slider.value = 0.0.toFixed(2);
                 this.jointValues.joint1 = 0;
                 this.jointValues.joint2 = 54.97;
                 this.jointValues.joint3 = 59.0;
@@ -269,12 +269,12 @@
                     0.0,
                     0.0
                 ));
-                this.joint1Slider.value = 0.0;
-                this.joint2Slider.value = 0.0;
-                this.joint3Slider.value = 0.0;
-                this.joint4Slider.value = 0.0;
-                this.joint5Slider.value = 0.0;
-                this.joint6Slider.value = 0.0;
+                this.joint1Slider.value = 0.0.toFixed(2);
+                this.joint2Slider.value = 0.0.toFixed(2);
+                this.joint3Slider.value = 0.0.toFixed(2);
+                this.joint4Slider.value = 0.0.toFixed(2);
+                this.joint5Slider.value = 0.0.toFixed(2);
+                this.joint6Slider.value = 0.0.toFixed(2);
 
                 this.jointValues.joint1 = 0;
                 this.jointValues.joint2 = 0;
@@ -293,12 +293,12 @@
                     0,
                     0
                 ));
-                this.joint1Slider.value = -156.33;
-                this.joint2Slider.value = 32.03;
-                this.joint3Slider.value = 57.65;
-                this.joint4Slider.value = -3.85;
-                this.joint5Slider.value = 0;
-                this.joint6Slider.value = 0;
+                this.joint1Slider.value = -156.33.toFixed(2);
+                this.joint2Slider.value = 32.03.toFixed(2);
+                this.joint3Slider.value = 57.65.toFixed(2);
+                this.joint4Slider.value = -3.85.toFixed(2);
+                this.joint5Slider.value = 0.00.toFixed(2);
+                this.joint6Slider.value = 0.00.toFixed(2);
 
                 this.jointValues.joint1 = -156.33;
                 this.jointValues.joint2 = 32.03;
