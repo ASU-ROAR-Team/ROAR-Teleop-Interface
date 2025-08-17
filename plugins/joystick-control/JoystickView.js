@@ -21,12 +21,19 @@
             this.thumbY = 0;
             this.isDragging = false;
 
-            this.maxLinearSpeed = 1.0;
-            this.maxAngularSpeed = 0.5;
+            this.linearSpeedSlider = null;
+            this.angularSpeedSlider = null;
+            this.linearSpeedValueSpan = null;
+            this.angularSpeedValueSpan = null;
+
 
             this.ros = null;
-            this.cmdVelTopic = null;
+            this.joyTopicPublisher = null;
             this.rosConnected = false;
+
+            // New: Rover status properties
+            this.roverStatusSubscriber = null;
+            this.currentRoverState = { rover_state: 'IDLE', active_mission: '' }; // Initialize with default state
 
             // Bind event handlers to the class instance
             this.onMouseDown = this.onMouseDown.bind(this);
@@ -37,6 +44,8 @@
             this.handleRosConnection = this.handleRosConnection.bind(this);
             this.handleRosError = this.handleRosError.bind(this);
             this.handleRosClose = this.handleRosClose.bind(this);
+            this.handleRoverStatus = this.handleRoverStatus.bind(this); // New: Bind rover status handler
+            this.updateJoystickUIState = this.updateJoystickUIState.bind(this); // New: Bind UI state updater
         }
 
         // This method is called by OpenMCT to render the view
@@ -79,6 +88,7 @@
             this.drawJoystick();
             this.addEventListeners();
             this.updateSpeedValues(); // Initialize slider display
+            this.updateJoystickUIState(); // Set initial joystick UI state based on default rover state
         }
 
         addEventListeners() {
@@ -103,7 +113,9 @@
             this.angularSpeedSlider.addEventListener('input', this.updateSpeedValues);
 
             // Handle window resize to redraw canvas
-            window.addEventListener('resize', () => {
+            // IMPORTANT: Anonymous function for resize listener needs to be converted to named function
+            // or bound to 'this' in constructor for proper removal in destroy()
+            this._resizeListener = () => { // Store as a property to be able to remove it
                 if (this.canvas) {
                     const wrapper = this.canvas.parentElement;
                     this.canvas.width = wrapper.clientWidth;
@@ -115,9 +127,10 @@
                     this.thumbX = this.joystickCenterX;
                     this.thumbY = this.joystickCenterY;
                     this.drawJoystick();
-                    this.publishTwist(0, 0); // Send zero twist on resize
+                    this.publishJoy(0, 0); // Send zero input on resize
                 }
-            });
+            };
+            window.addEventListener('resize', this._resizeListener);
         }
 
         removeEventListeners() {
@@ -126,8 +139,9 @@
                 this.canvas.removeEventListener('mousemove', this.onMouseMove);
                 this.canvas.removeEventListener('mouseup', this.onMouseUp);
                 this.canvas.removeEventListener('mouseleave', this.onMouseLeave);
-                this.canvas.removeEventListener('touchstart', this.onMouseDown);
-                this.canvas.removeEventListener('touchmove', this.onMouseMove);
+                // Remove touch listeners using the same bound functions as added
+                this.canvas.removeEventListener('touchstart', (e) => { e.preventDefault(); this.onMouseDown(e.touches[0]); }); // Re-add exact function reference if using inline arrow function
+                this.canvas.removeEventListener('touchmove', (e) => { e.preventDefault(); this.onMouseMove(e.touches[0]); });
                 this.canvas.removeEventListener('touchend', this.onMouseUp);
                 this.canvas.removeEventListener('touchcancel', this.onMouseUp);
             }
@@ -137,14 +151,16 @@
             if (this.angularSpeedSlider) {
                 this.angularSpeedSlider.removeEventListener('input', this.updateSpeedValues);
             }
-            window.removeEventListener('resize', this.drawJoystick);
+            if (this._resizeListener) {
+                window.removeEventListener('resize', this._resizeListener);
+            }
         }
 
         updateSpeedValues() {
-            this.maxLinearSpeed = parseFloat(this.linearSpeedSlider.value);
-            this.maxAngularSpeed = parseFloat(this.angularSpeedSlider.value);
-            this.linearSpeedValueSpan.textContent = this.maxLinearSpeed.toFixed(1);
-            this.angularSpeedValueSpan.textContent = this.maxAngularSpeed.toFixed(1);
+            const currentLinear = parseFloat(this.linearSpeedSlider.value);
+            const currentAngular = parseFloat(this.angularSpeedSlider.value);
+            this.linearSpeedValueSpan.textContent = currentLinear.toFixed(1);
+            this.angularSpeedValueSpan.textContent = currentAngular.toFixed(1);
         }
 
         drawJoystick() {
@@ -164,17 +180,31 @@
             // Draw thumbstick
             this.ctx.beginPath();
             this.ctx.arc(this.thumbX, this.thumbY, this.thumbRadius, 0, Math.PI * 2, false);
-            this.ctx.fillStyle = '#f84632'; /* Accent color */
+            // Change thumb color based on active mission state
+            if (this.currentRoverState.active_mission.toLowerCase() === 'teleoperation') {
+                this.ctx.fillStyle = '#4CAF50'; /* Green for active */
+                this.ctx.strokeStyle = '#388E3C';
+            } else {
+                this.ctx.fillStyle = '#f84632'; /* Default/Inactive color */
+                this.ctx.strokeStyle = '#E53935';
+            }
             this.ctx.fill();
-            this.ctx.strokeStyle = '#f84632'; /* Primary color */
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
         }
 
         onMouseDown(event) {
-            this.isDragging = true;
-            this.canvas.style.cursor = 'grabbing';
-            this.updateThumbPosition(event);
+            // Only allow dragging if in Teleoperation mode
+            if (this.currentRoverState.active_mission.toLowerCase() === 'teleoperation') {
+                this.isDragging = true;
+                this.canvas.style.cursor = 'grabbing';
+                this.updateThumbPosition(event);
+            } else {
+                if (this.openmct && this.openmct.notifications) {
+                    this.openmct.notifications.warn('Joystick is disabled outside of Teleoperation mode.');
+                }
+                console.warn('Joystick input ignored: Not in Teleoperation mode.');
+            }
         }
 
         onMouseMove(event) {
@@ -189,7 +219,7 @@
             this.thumbX = this.joystickCenterX;
             this.thumbY = this.joystickCenterY;
             this.drawJoystick();
-            this.publishTwist(0, 0); // Send zero twist when released
+            this.publishJoy(0, 0); // Send zero input when released
         }
 
         onMouseLeave() {
@@ -221,10 +251,12 @@
             this.drawJoystick();
 
             // Normalize values to -1 to 1 range
+            // X-axis: -1 (left) to 1 (right)
+            // Y-axis: -1 (down) to 1 (up) - matches ROS conventions for joystick
             const normalizedX = (this.thumbX - this.joystickCenterX) / this.joystickRadius;
             const normalizedY = -(this.thumbY - this.joystickCenterY) / this.joystickRadius; // Y-axis inverted for linear speed (up is positive)
 
-            this.publishTwist(normalizedX, normalizedY);
+            this.publishJoy(normalizedX, normalizedY);
         }
 
         connectToROS() {
@@ -243,12 +275,20 @@
             this.ros.on('error', this.handleRosError);
             this.ros.on('close', this.handleRosClose);
 
-            // Initialize the publisher
-            this.cmdVelTopic = new window.ROSLIB.Topic({
+            // Initialize the publisher for raw joystick data
+            this.joyTopicPublisher = new window.ROSLIB.Topic({
                 ros: this.ros,
-                name: '/cmd_vel', // Standard topic for velocity commands
-                messageType: 'geometry_msgs/Twist'
+                name: '/joystick/raw_input', // Topic for raw joystick input
+                messageType: 'sensor_msgs/Joy' // Standard ROS Joy message type
             });
+
+            // New: Subscribe to Rover Status topic from Supervisor
+            this.roverStatusSubscriber = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/rover_status',
+                messageType: 'roar_msgs/RoverStatus' // Ensure you have this message type defined
+            });
+            this.roverStatusSubscriber.subscribe(this.handleRoverStatus);
         }
 
         handleRosConnection() {
@@ -257,6 +297,7 @@
             this.joystickStatus.textContent = 'Connected to ROS';
             this.joystickStatus.classList.remove('error');
             this.joystickStatus.classList.add('connected');
+            this.updateJoystickUIState(); // Update UI on ROS connection
         }
 
         handleRosError(error) {
@@ -265,6 +306,7 @@
             this.joystickStatus.textContent = 'ROS Connection Error!';
             this.joystickStatus.classList.remove('connected');
             this.joystickStatus.classList.add('error');
+            this.updateJoystickUIState(); // Update UI on ROS error
         }
 
         handleRosClose() {
@@ -273,6 +315,7 @@
             this.joystickStatus.textContent = 'Disconnected from ROS';
             this.joystickStatus.classList.remove('connected');
             this.joystickStatus.classList.add('error');
+            this.updateJoystickUIState(); // Update UI on ROS disconnect
             // Attempt to reconnect after a delay
             setTimeout(() => {
                 console.log('Attempting to reconnect to ROS...');
@@ -280,30 +323,88 @@
             }, 3000); // Reconnect after 3 seconds
         }
 
-        publishTwist(normalizedX, normalizedY) {
-            if (!this.rosConnected || !this.cmdVelTopic) {
-                console.warn('Not connected to ROS or cmd_vel topic not initialized. Cannot publish Twist message.');
+        // New: Handle incoming RoverStatus messages
+        handleRoverStatus(message) {
+            this.currentRoverState = {
+                rover_state: message.rover_state,
+                active_mission: message.active_mission
+            };
+            console.log("Rover Status Received:", this.currentRoverState);
+            this.updateJoystickUIState(); // Update UI based on new state
+        }
+
+        // New: Method to update joystick UI and enable/disable publishing
+        updateJoystickUIState() {
+            const isTeleopMode = this.currentRoverState.active_mission.toLowerCase() === 'teleoperation';
+            const statusTextElement = this.element.querySelector('#joystickStatus');
+            const manualControlMessage = this.element.querySelector('#joystickControlMessage'); // Assuming you add this in HTML
+
+            // Update joystick thumb color
+            this.drawJoystick(); // Redraw to update thumb color
+
+            // Update status text
+            if (statusTextElement) {
+                if (!this.rosConnected) {
+                    // ROS connection status overrides mission status
+                    statusTextElement.textContent = 'ROS Disconnected';
+                    statusTextElement.classList.remove('connected');
+                    statusTextElement.classList.add('error');
+                } else if (isTeleopMode) {
+                    statusTextElement.textContent = 'Joystick Active (Teleop Mode)';
+                    statusTextElement.classList.remove('error');
+                    statusTextElement.classList.add('connected');
+                } else {
+                    statusTextElement.textContent = `Joystick Inactive (Mission: ${this.currentRoverState.active_mission || 'None'})`;
+                    statusTextElement.classList.remove('connected');
+                    statusTextElement.classList.add('error'); // Use error style to indicate inactive control
+                }
+            }
+
+            // Update sliders' disabled state
+            if (this.linearSpeedSlider) {
+                this.linearSpeedSlider.disabled = !isTeleopMode;
+            }
+            if (this.angularSpeedSlider) {
+                this.angularSpeedSlider.disabled = !isTeleopMode;
+            }
+
+            // Update general control message below sliders
+            if (manualControlMessage) {
+                if (isTeleopMode) {
+                    manualControlMessage.textContent = 'Use the joystick to control rover movement.';
+                    manualControlMessage.style.color = '#333'; // Default text color
+                } else {
+                    manualControlMessage.textContent = `Joystick is inactive. Current mission: '${this.currentRoverState.active_mission || 'None'}'. Switch to 'Teleoperation' mission to enable.`;
+                    manualControlMessage.style.color = '#e74c3c'; // Warning/Error color
+                }
+            }
+        }
+
+
+        publishJoy(normalizedX, normalizedY) {
+            // Only publish if connected to ROS AND in "Teleoperation" mission
+            if (!this.rosConnected || !this.joyTopicPublisher || this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
+                if (this.isDragging) { // Only show warning if user is actively trying to drag
+                    console.warn('Joystick commands not published: Not in Teleoperation mode or ROS disconnected.');
+                }
                 return;
             }
 
-            const linearSpeed = normalizedY * this.maxLinearSpeed;
-            const angularSpeed = -normalizedX * this.maxAngularSpeed; // Negative for standard right turn (clockwise) with positive X
-
-            const twist = new window.ROSLIB.Message({
-                linear: {
-                    x: linearSpeed,
-                    y: 0.0,
-                    z: 0.0
+            // Create a Joy message. We'll use axes[0] for angular and axes[1] for linear.
+            const joyMsg = new window.ROSLIB.Message({
+                header: {
+                    stamp: {
+                        secs: Math.floor(Date.now() / 1000),
+                        nsecs: (Date.now() % 1000) * 1e6
+                    },
+                    frame_id: ''
                 },
-                angular: {
-                    x: 0.0,
-                    y: 0.0,
-                    z: angularSpeed
-                }
+                axes: [normalizedX, normalizedY], // Angular (X) and Linear (Y)
+                buttons: [] // No buttons from this simple joystick view
             });
 
-            this.cmdVelTopic.publish(twist);
-            // console.log(`Published Twist: Linear X=${linearSpeed.toFixed(2)}, Angular Z=${angularSpeed.toFixed(2)}`);
+            this.joyTopicPublisher.publish(joyMsg);
+            // console.log(`Published Joy: Axes[0]=${normalizedX.toFixed(2)}, Axes[1]=${normalizedY.toFixed(2)}`);
         }
 
         // This method is crucial for cleaning up resources when the view is destroyed by OpenMCT
@@ -315,6 +416,10 @@
                 this.ros.off('connection', this.handleRosConnection);
                 this.ros.off('error', this.handleRosError);
                 this.ros.off('close', this.handleRosClose);
+                // New: Unsubscribe from RoverStatus
+                if (this.roverStatusSubscriber) {
+                    this.roverStatusSubscriber.unsubscribe();
+                }
                 // Close the ROS connection if it's still open
                 if (this.ros.isConnected) {
                     this.ros.close();
@@ -328,6 +433,8 @@
             this.angularSpeedValueSpan = null;
             this.joystickStatus = null;
             this.htmlContent = null;
+            this.roverStatusSubscriber = null;
+            this.currentRoverState = null;
             this.element.innerHTML = ''; // Clear the DOM element
         }
     }
@@ -335,4 +442,4 @@
     // Expose JoystickView globally
     window.JoystickView = JoystickView;
 
-})(); // End of IIFE
+})();

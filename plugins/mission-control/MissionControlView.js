@@ -12,8 +12,8 @@
         this.activeMission = '';
         this.isProcessing = false;
         
-        // Available missions
-        this.missions = ['Navigation', 'Sampling', 'Maintenance', 'Teleoperation'];
+        // Updated: Added 'Drilling' to the list, placed before 'Teleoperation'
+        this.missions = ['Navigation', 'Sampling', 'Maintenance', 'Drilling', 'Teleoperation'];
         
         this.initROS();
     }
@@ -44,14 +44,16 @@
             this.missionService = new ROSLIB.Service({
                 ros: this.ros,
                 name: '/mission_control',
-                serviceType: 'rover_supervisor/MissionControl'
+                // Change the serviceType to the correct package and service name
+                serviceType: 'roar_msgs/MissionControl' 
             });
 
             // Subscribe to rover status
             this.statusSubscriber = new ROSLIB.Topic({
                 ros: this.ros,
                 name: '/rover_status',
-                messageType: 'rover_supervisor/RoverStatus'
+                // Change the messageType to the correct package and message name
+                messageType: 'roar_msgs/RoverStatus' 
             });
 
             this.statusSubscriber.subscribe((message) => {

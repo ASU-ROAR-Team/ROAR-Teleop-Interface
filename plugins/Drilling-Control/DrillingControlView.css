@@ -6,271 +6,317 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 20px;
-    background-color: #f9fafb;
+    padding: 15px; /* Reduced from 20px */
+    background-color: #f9fafb; /* Light background */
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     font-family: 'Inter', sans-serif;
-    color: #333;
+    color: #333; /* Dark text for contrast */
     height: 100%;
     width: 100%;
     box-sizing: border-box;
     overflow: auto;
-    gap: 20px;
+    gap: 15px; /* Reduced from 20px */
 }
 
 /* Style for section headers */
-.section-header {
-    font-size: 1.5rem;
+.drilling-section-header {
+    font-size: 1.25rem; /* Reduced from 1.5rem */
     font-weight: 700;
-    margin-bottom: 10px;
-    color: #1a202c;
+    margin-bottom: 8px; /* Reduced from 10px */
+    color: #1a202c; /* Dark color for header text */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.drilling-section-header-icon {
+    color: #4a90e2; /* Blue accent for icons */
 }
 
 /* Status bar for ROS connection and FSM state */
-.status-bar {
+.drilling-status-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
     max-width: 800px;
-    background-color: #fff;
-    padding: 10px 15px;
+    background-color: #fff; /* White background for status bar */
+    padding: 8px 12px; /* Reduced from 10px 15px */
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     font-weight: bold;
     color: #333;
+    font-size: 0.9em; /* Smaller font size */
 }
 
-.status-dot {
-    width: 12px;
-    height: 12px;
+.drilling-status-dot {
+    width: 10px; /* Reduced from 12px */
+    height: 10px; /* Reduced from 12px */
     border-radius: 50%;
-    background-color: #ccc;
-    margin-right: 10px;
+    background-color: #ccc; /* Default grey */
+    margin-right: 8px; /* Reduced from 10px */
 }
 
-.status-dot.connected {
-    background-color: #4caf50;
+.drilling-status-dot.connected {
+    background-color: #4caf50; /* Green for connected */
 }
 
-.status-dot.error {
-    background-color: #f44336;
+.drilling-status-dot.error {
+    background-color: #f44336; /* Red for error */
 }
 
-#rosStatus {
+#drillingRosStatus {
     flex-grow: 1;
     text-align: left;
-    font-size: 0.9em;
 }
 
-#fsmState {
-    font-size: 0.9em;
-    padding: 4px 8px;
+#drillingFsmState {
+    text-align: right;
+    margin-left: 8px;
+    text-transform: uppercase;
+    color: #555; /* Darker grey */
+    background-color: #eee; /* Light grey background */
+    padding: 2px 6px;
     border-radius: 4px;
-    color: white;
-    background-color: #3498db;
-    transition: background-color 0.3s;
 }
 
 /* Layout for controls and telemetry displays */
-.controls-grid {
+.drilling-controls-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Adjusted min-width */
+    gap: 15px; /* Reduced from 20px */
     width: 100%;
     max-width: 800px;
 }
 
 /* Individual container for controls */
-.control-section {
+.drilling-control-section {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    padding: 15px;
-    background-color: #fff;
+    padding: 12px; /* Reduced from 15px */
+    background-color: #fff; /* White background for sections */
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+.drilling-control-section p {
+    font-size: 0.85em; /* Smaller font size */
+    color: #666; /* Medium grey text */
+    margin-top: 0;
+}
+
+/* The new telemetry section now uses the same styling as control-section */
+#drilling-telemetry-section {
+    /* Existing styles for .drilling-control-section apply */
+    /* Add these to make it span the full width below the grid */
+    width: 100%;
+    max-width: 800px; /* Matches the max-width of .drilling-controls-grid */
+    align-self: center; /* Ensures it's centered if the container is wider */
+}
+
 /* Styling for buttons */
-.control-buttons {
+.drilling-control-buttons {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    gap: 10px; /* Reduced from 15px */
+    margin-top: 10px;
 }
 
-.control-button {
-    background-color: #3498db;
-    color: white;
-    padding: 12px;
+.drilling-control-button {
+    padding: 8px 12px; /* Reduced padding for smaller buttons */
     border: none;
-    border-radius: 8px;
+    border-radius: 6px; /* Adjusted border radius */
+    font-size: 0.9em; /* Smaller font size */
     font-weight: bold;
+    color: white;
+    background-color: #3498db; /* Default blue */
     cursor: pointer;
-    transition: background-color 0.2s, transform 0.2s;
+    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    outline: none; /* Remove outline on focus for aesthetics */
 }
 
-.control-button.warning {
-    background-color: #f39c12;
+.drilling-control-button.warning {
+    background-color: #f39c12; /* Orange */
 }
 
-.control-button.danger {
-    background-color: #e74c3c;
+.drilling-control-button.danger {
+    background-color: #e74c3c; /* Red */
 }
 
-.control-button:hover:not(:disabled) {
+.drling-control-button:hover:not(:disabled) {
+    background-color: #2980b9; /* Darker blue on hover */
     transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
 }
 
-.control-button:disabled {
-    background-color: #ccc;
+.drilling-control-button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.drilling-control-button:disabled {
+    background-color: #ccc; /* Grey for disabled */
     cursor: not-allowed;
+    box-shadow: none;
 }
 
 /* Telemetry display section */
-.telemetry-display {
+.drilling-telemetry-display {
     display: flex;
     justify-content: space-around;
-    gap: 20px;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    text-align: center;
 }
 
-.telemetry-item {
+.drilling-telemetry-item {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 5px;
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    background-color: #fafafa;
+    gap: 4px;
+    background-color: #f0f0f0; /* Light background for telemetry items */
+    padding: 8px 12px;
+    border-radius: 6px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.telemetry-item h3 {
-    font-size: 1.2rem;
+.drilling-telemetry-item h3 {
     margin: 0;
-    color: #555;
+    font-size: 0.9em; /* Smaller font size */
+    color: #666; /* Medium grey text */
 }
 
-.telemetry-item span {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #4a90e2;
+.drilling-telemetry-item span {
+    font-size: 1.5rem; /* Reduced from 2rem */
+    font-weight: bold;
+    color: #4a90e2; /* Blue for telemetry values */
 }
 
 /* --- Webcam Specific Styles --- */
-.webcam-feed-wrapper {
+.drilling-webcam-feed-wrapper {
     position: relative;
     width: 100%;
-    padding-top: 75%; /* 4:3 Aspect Ratio (height / width * 100%) for video */
-    background-color: #333;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    background-color: #000; /* Black background for video feed */
     border-radius: 8px;
-    overflow: hidden; /* Ensure video and controls stay within bounds */
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.3); /* Inner shadow for a framed look */
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-#webcamVideo {
+#drillingWebcamVideo {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: contain; /* Keep aspect ratio, letterbox if needed */
-    background-color: #333; /* Fallback background */
-    display: block; /* Ensure it takes up space */
+    object-fit: cover; /* Ensures video fills the frame */
 }
 
-.webcam-status-message {
+/* Webcam Status Message */
+#drillingWebcamStatusMessage {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    padding: 10px 20px;
-    border-radius: 5px;
-    z-index: 10;
-    font-size: 14px;
+    color: #fff; /* White text over video */
+    font-size: 1em;
+    font-weight: bold;
     text-align: center;
-    color: white;
-    background-color: rgba(0, 0, 0, 0.7); /* Dark semi-transparent background */
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7); /* Adds readability */
+    padding: 8px 15px;
+    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+    border-radius: 5px;
+    z-index: 10; /* Ensure it's above the video */
+    display: none; /* Hidden by default, shown by JS */
 }
 
-.webcam-status-message.info {
-    background-color: rgba(92, 184, 92, 0.9); /* Green */
+#drillingWebcamStatusMessage.info {
+    color: #fff;
+    background-color: rgba(60, 179, 113, 0.8); /* Greenish for info */
 }
 
-.webcam-status-message.error {
-    background-color: rgba(217, 83, 79, 0.9); /* Red */
+#drillingWebcamStatusMessage.error {
+    color: #fff;
+    background-color: rgba(220, 20, 60, 0.8); /* Red for error */
 }
 
-.webcam-status-message.warning {
-    background-color: rgba(240, 173, 78, 0.9); /* Orange */
-    color: black;
+#drillingWebcamStatusMessage.warning {
+    color: #333;
+    background-color: rgba(255, 165, 0, 0.8); /* Orange for warning */
 }
 
-.snapshot-button {
+/* Snapshot Button */
+.drilling-snapshot-button {
     position: absolute;
-    bottom: 15px;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
-    width: 60px;
-    height: 60px;
-    background-color: transparent;
-    border: 2px solid white;
+    width: 40px; /* Reduced size */
+    height: 40px; /* Reduced size */
+    background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white */
+    border: 2px solid #fff;
     border-radius: 50%;
     cursor: pointer;
-    display: none; /* Hidden until stream starts */
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    outline: none;
-    transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
-    display: flex; /* Use flexbox to center inner circle */
+    display: flex;
     justify-content: center;
     align-items: center;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 5; /* Above video */
 }
 
-.snapshot-button:active {
-    transform: translateX(-50%) scale(0.95);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+.drilling-snapshot-button:hover {
+    background-color: #fff;
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.snapshot-inner-circle {
-    width: 45px;
-    height: 45px;
-    background-color: white;
+.drilling-snapshot-button:active {
+    background-color: #fff;
+    transform: translateX(-50%) scale(0.9);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.drilling-snapshot-inner-circle {
+    width: 25px; /* Reduced size */
+    height: 25px; /* Reduced size */
+    background-color: #e74c3c; /* Red inner circle */
     border-radius: 50%;
 }
-
 
 /* Responsive design for mobile */
 @media (max-width: 768px) {
     .drilling-control-container {
         padding: 10px;
-        gap: 15px;
+        gap: 10px;
     }
 
-    .status-bar {
+    .drilling-status-bar {
         flex-direction: column;
         align-items: center;
-        gap: 8px;
-        padding: 8px;
+        gap: 6px;
+        padding: 6px;
     }
 
-    #rosStatus {
+    #drillingRosStatus {
         text-align: center;
         margin-right: 0;
     }
 
-    .controls-grid {
+    .drilling-controls-grid {
         grid-template-columns: 1fr;
     }
 
-    .telemetry-display {
+    .drilling-telemetry-display {
         flex-direction: column;
+        align-items: center;
         gap: 10px;
     }
 
-    .webcam-feed-wrapper {
-        padding-top: 60%; /* Adjust aspect ratio for smaller screens if needed */
+    .drilling-webcam-feed-wrapper {
+        padding-top: 75%; /* 4:3 Aspect Ratio for better mobile fit */
     }
 }
