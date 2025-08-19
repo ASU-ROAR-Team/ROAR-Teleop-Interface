@@ -22,10 +22,20 @@
             <div class="drilling-control-buttons">
                 <button id="drillingPlatformUpButton" class="drilling-control-button">Platform Up</button>
                 <button id="drillingPlatformDownButton" class="drilling-control-button">Platform Down</button>
-                <button id="drillingAugerOnButton" class="drilling-control-button">Auger On</button>
-                <button id="drillingAugerOffButton" class="drilling-control-button danger">Auger Off</button>
-                <button id="drillingGateOpenButton" class="drilling-control-button">Gate Open</button>
-                <button id="drillingGateCloseButton" class="drilling-control-button danger">Gate Close</button>
+                <div class="drilling-switch-container">
+                    <span class="drilling-switch-label">Auger</span>
+                    <label class="drilling-switch">
+                        <input type="checkbox" id="drillingAugerToggle">
+                        <span class="drilling-slider"></span>
+                    </label>
+                </div>
+                <div class="drilling-switch-container">
+                    <span class="drilling-switch-label">Gate</span>
+                    <label class="drilling-switch">
+                        <input type="checkbox" id="drillingGateToggle">
+                        <span class="drilling-slider"></span>
+                    </label>
+                </div>
             </div>
             <p>These controls directly command the rig. They are active when the system is in "IDLE" state.</p>
         </div>

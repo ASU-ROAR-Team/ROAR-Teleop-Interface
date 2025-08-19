@@ -12,8 +12,8 @@
             this.drillingManualInputPublisher = null; 
             this.drillingStatusSubscriber = null;
             this.fsmStateSubscriber = null;
-            this.roverStatusSubscriber = null; // New: Subscriber for rover status
-            this.currentRoverState = { rover_state: 'IDLE', active_mission: '' }; // New: To store rover state
+            this.roverStatusSubscriber = null;
+            this.currentRoverState = { rover_state: 'IDLE', active_mission: '' };
 
             this.rosStatusDot = null;
             this.rosStatus = null;
@@ -23,10 +23,8 @@
 
             this.platformUpButton = null;
             this.platformDownButton = null;
-            this.augerOnButton = null;
-            this.augerOffButton = null;
-            this.gateOpenButton = null;
-            this.gateCloseButton = null;
+            this.augerToggleSwitch = null; // New: Reference for auger switch
+            this.gateToggleSwitch = null; // New: Reference for gate switch
 
             this.currentManualInputState = {
                 manual_up: false,
@@ -228,10 +226,8 @@
 
             this.platformUpButton = this.element.querySelector('#drillingPlatformUpButton');
             this.platformDownButton = this.element.querySelector('#drillingPlatformDownButton');
-            this.augerOnButton = this.element.querySelector('#drillingAugerOnButton');
-            this.augerOffButton = this.element.querySelector('#drillingAugerOffButton');
-            this.gateOpenButton = this.element.querySelector('#drillingGateOpenButton');
-            this.gateCloseButton = this.element.querySelector('#drillingGateCloseButton');
+            this.augerToggleSwitch = this.element.querySelector('#drillingAugerToggle');
+            this.gateToggleSwitch = this.element.querySelector('#drillingGateToggle');
 
             const webcamContainer = this.element.querySelector('#drillingWebcamContainer');
             if (webcamContainer) {
@@ -260,13 +256,12 @@
 
             this.addEventListeners();
             this.startWebcam();
-            this.updateManualControlUIState(); // Set initial button state
+            this.updateManualControlUIState();
         }
 
         addEventListeners() {
             const addMomentaryListener = (button, command, value) => {
                 if (button) {
-                    // We will enable/disable buttons based on mission state, so check if not disabled
                     button.addEventListener('mousedown', () => { if (!button.disabled) this.handleManualButtonClick(command, value); });
                     button.addEventListener('mouseup', () => { if (!button.disabled) this.handleManualButtonClick(command, false); });
                     button.addEventListener('mouseleave', () => { if (!button.disabled) this.handleManualButtonClick(command, false); });
@@ -275,16 +270,17 @@
             addMomentaryListener(this.platformUpButton, 'manual_up', true);
             addMomentaryListener(this.platformDownButton, 'manual_down', true);
 
-            const addClickListener = (button, command, value) => {
-                if (button) {
-                    // We will enable/disable buttons based on mission state, so check if not disabled
-                    button.addEventListener('click', () => { if (!button.disabled) this.handleManualButtonClick(command, value); });
-                }
-            };
-            addClickListener(this.augerOnButton, 'auger_on', true);
-            addClickListener(this.augerOffButton, 'auger_on', false);
-            addClickListener(this.gateOpenButton, 'gate_open', true);
-            addClickListener(this.gateCloseButton, 'gate_open', false);
+            // New: Add change listeners for switches
+            if (this.augerToggleSwitch) {
+                this.augerToggleSwitch.addEventListener('change', () => {
+                    this.handleSwitchChange('auger_on', this.augerToggleSwitch.checked);
+                });
+            }
+            if (this.gateToggleSwitch) {
+                this.gateToggleSwitch.addEventListener('change', () => {
+                    this.handleSwitchChange('gate_open', this.gateToggleSwitch.checked);
+                });
+            }
 
             if (this.webcamSnapshotButton) {
                 this.webcamSnapshotButton.addEventListener('click', this.takeWebcamSnapshot);
@@ -293,9 +289,26 @@
                 this.webcamSnapshotButton.addEventListener('mouseleave', this.handleSnapshotButtonMouseLeave);
             }
         }
+        
+        // New: handle switch changes
+        handleSwitchChange(commandType, value) {
+            if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
+                // Revert the switch state if not in the correct mode
+                if (commandType === 'auger_on') {
+                    this.augerToggleSwitch.checked = !value;
+                } else if (commandType === 'gate_open') {
+                    this.gateToggleSwitch.checked = !value;
+                }
+                if (this.openmct && this.openmct.notifications) {
+                    this.openmct.notifications.warn('Manual controls are disabled outside of Teleoperation mode.');
+                }
+                return;
+            }
+            this.currentManualInputState[commandType] = value;
+            this.sendDrillingManualInput(this.currentManualInputState);
+        }
 
         sendDrillingManualInput(inputState) {
-            // New: Only send commands if in "Teleoperation" mission
             if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
                 console.warn('Not in Teleoperation mode. Manual command not sent.');
                 if (this.openmct && this.openmct.notifications) {
@@ -326,7 +339,6 @@
         }
 
         handleManualButtonClick(commandType, value) {
-            // Buttons are already disabled in UI, but add a redundant check here
             if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
                 return;
             }
@@ -374,11 +386,10 @@
             });
             this.fsmStateSubscriber.subscribe(this.handleFsmState);
 
-            // New: Subscribe to Rover Status topic
             this.roverStatusSubscriber = new window.ROSLIB.Topic({
                 ros: this.ros,
                 name: '/rover_status',
-                messageType: 'roar_msgs/RoverStatus' // Ensure you have this message type defined
+                messageType: 'roar_msgs/RoverStatus'
             });
             this.roverStatusSubscriber.subscribe(this.handleRoverStatus);
         }
@@ -399,29 +410,28 @@
             }
         }
 
-        // New: Handle incoming RoverStatus messages
         handleRoverStatus = (message) => {
             this.currentRoverState = {
                 rover_state: message.rover_state,
                 active_mission: message.active_mission
             };
             console.log("Rover Status Received:", this.currentRoverState);
-            this.updateManualControlUIState(); // Update UI based on new state
+            this.updateManualControlUIState();
         }
 
-        // New: Method to enable/disable manual control buttons
+        // New: Method to enable/disable manual control buttons and switches
         updateManualControlUIState = () => {
             const buttons = [
                 this.platformUpButton, this.platformDownButton,
-                this.augerOnButton, this.augerOffButton,
-                this.gateOpenButton, this.gateCloseButton
+            ];
+            const switches = [
+                this.augerToggleSwitch, this.gateToggleSwitch
             ];
             const enableManualControls = this.currentRoverState.active_mission.toLowerCase() === 'teleoperation';
 
             buttons.forEach(button => {
                 if (button) {
                     button.disabled = !enableManualControls;
-                    // Optional: Add/remove a CSS class for visual feedback (e.g., dimming)
                     if (enableManualControls) {
                         button.classList.remove('disabled-manual-control');
                     } else {
@@ -429,16 +439,29 @@
                     }
                 }
             });
+            
+            switches.forEach(sw => {
+                if (sw) {
+                    sw.disabled = !enableManualControls;
+                    const parentContainer = sw.closest('.drilling-switch-container');
+                    if (parentContainer) {
+                         if (enableManualControls) {
+                            parentContainer.classList.remove('disabled');
+                        } else {
+                            parentContainer.classList.add('disabled');
+                        }
+                    }
+                }
+            });
 
-            // You might also want to display a message to the user
             const manualControlMessage = this.element.querySelector('.drilling-control-section p');
             if (manualControlMessage) {
                 if (enableManualControls) {
                     manualControlMessage.textContent = 'These controls directly command the rig. They are active when the system is in "IDLE" state.';
-                    manualControlMessage.style.color = '#666'; // Default color
+                    manualControlMessage.style.color = '#666';
                 } else {
                     manualControlMessage.textContent = `Manual controls are disabled outside of 'Teleoperation' mission. Current mission: ${this.currentRoverState.active_mission || 'None'}.`;
-                    manualControlMessage.style.color = '#e74c3c'; // Red for disabled message
+                    manualControlMessage.style.color = '#e74c3c';
                 }
             }
         }
@@ -490,7 +513,6 @@
             if (this.fsmStateSubscriber) {
                 this.fsmStateSubscriber.unsubscribe();
             }
-            // New: Unsubscribe from RoverStatus
             if (this.roverStatusSubscriber) {
                 this.roverStatusSubscriber.unsubscribe();
             }
@@ -508,10 +530,8 @@
             
             this.platformUpButton = null;
             this.platformDownButton = null;
-            this.augerOnButton = null;
-            this.augerOffButton = null;
-            this.gateOpenButton = null;
-            this.gateCloseButton = null;
+            this.augerToggleSwitch = null;
+            this.gateToggleSwitch = null;
             this.webcamVideoElement = null;
             this.webcamMediaStream = null;
             this.webcamStatusMessageElement = null;
@@ -524,9 +544,8 @@
             this.sampleWeightDisplay = null;
             this.ros = null;
             this.openmct = null;
-            this.currentRoverState = null; // Clear state
-            this.roverStatusSubscriber = null; // Clear subscriber reference
-
+            this.currentRoverState = null;
+            this.roverStatusSubscriber = null;
 
             this.element.innerHTML = '';
         }
