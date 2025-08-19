@@ -29,6 +29,14 @@
             this.joint4Slider = null;
             this.joint5Slider = null;
             this.joint6Slider = null;
+            // NEW: References for the new input boxes
+            this.joint1Input = null;
+            this.joint2Input = null;
+            this.joint3Input = null;
+            this.joint4Input = null;
+            this.joint5Input = null;
+            this.joint6Input = null;
+            
             this.modeSwitchButton = null;
             this.poseXDisplay = null;
             this.poseYDisplay = null;
@@ -45,6 +53,15 @@
             this.cameraFeed1Img = null;
             this.cameraFeed2Img = null;
             this.joystickStatus = null;
+            // NEW: References for the storage control switches
+            this.regolithStorageToggle = null;
+            this.rockStorageToggle = null;
+            
+            // NEW: References for the new joint state display blocks
+            this.jointStateDisplay = {};
+            for (let i = 1; i <= 6; i++) {
+                this.jointStateDisplay[`joint${i}`] = null;
+            }
 
             this.ros = null;
             this.rosConnected = false;
@@ -55,6 +72,11 @@
             this.currentPoseListener = null;
             this.camera1Topic = null;
             this.camera2Topic = null;
+            // NEW: ROS topics for the storage control
+            this.regolithStorageTopic = null;
+            this.rockStorageTopic = null;
+            // NEW: ROS topic for joint states
+            this.jointStateListener = null;
 
             // Throttle for camera feed updates to prevent flickering (target ~15 FPS)
             this.lastCamera1Update = 0;
@@ -63,6 +85,8 @@
 
             // Bind event handlers to the instance
             this.handleSliderInput = this.handleSliderInput.bind(this);
+            // NEW: Bind the new input handler
+            this.handleJointInput = this.handleJointInput.bind(this);
             this.handleRosConnection = this.handleRosConnection.bind(this);
             this.handleRosError = this.handleRosError.bind(this);
             this.handleRosClose = this.handleRosClose.bind(this);
@@ -72,6 +96,10 @@
             this.publishJointCommand = this.publishJointCommand.bind(this);
             this.handlePoseUpdate = this.handlePoseUpdate.bind(this);
             this.handleJointStateUpdate = this.handleJointStateUpdate.bind(this);
+            this.publishBooleanMessage = this.publishBooleanMessage.bind(this); // NEW: Bind the new function
+            this.handleKeydown = this.handleKeydown.bind(this); // NEW: Bind the new function
+            // NEW: Bind the new joint state handler
+            this.handleRobotJointState = this.handleRobotJointState.bind(this);
 
             // NEW: Bound function to handle camera topic messages with throttling
             this.handleCamera1Message = (message) => {
@@ -140,6 +168,14 @@
             this.joint4Slider = this.element.querySelector('#joint4Slider');
             this.joint5Slider = this.element.querySelector('#joint5Slider');
             this.joint6Slider = this.element.querySelector('#joint6Slider');
+            // NEW: Get references to the new input boxes
+            this.joint1Input = this.element.querySelector('#joint1Input');
+            this.joint2Input = this.element.querySelector('#joint2Input');
+            this.joint3Input = this.element.querySelector('#joint3Input');
+            this.joint4Input = this.element.querySelector('#joint4Input');
+            this.joint5Input = this.element.querySelector('#joint5Input');
+            this.joint6Input = this.element.querySelector('#joint6Input');
+            
 
             this.modeSwitchButton = this.element.querySelector('#modeSwitchButton');
             this.poseXDisplay = this.element.querySelector('#poseX');
@@ -157,9 +193,19 @@
             this.cameraFeed1Img = this.element.querySelector('#cameraFeed1');
             this.cameraFeed2Img = this.element.querySelector('#cameraFeed2');
             this.joystickStatus = this.element.querySelector('#joystickStatus');
+            // NEW: Get references to the new storage toggles
+            this.regolithStorageToggle = this.element.querySelector('#regolithStorageToggle');
+            this.rockStorageToggle = this.element.querySelector('#rockStorageToggle');
+            
+            // NEW: Get references to the joint state display blocks
+            for (let i = 1; i <= 6; i++) {
+                this.jointStateDisplay[`joint${i}`] = this.element.querySelector(`#joint${i}State`);
+            }
+
 
             this.addEventListeners();
             this.addPresetButtonListeners();
+            this.addKeyboardListeners(); // NEW: Add keyboard listeners
 
             // Set initial UI state
             this.updateUIState();
@@ -167,22 +213,24 @@
         }
 
         /**
-         * Adds all event listeners for sliders and buttons.
+         * Adds all event listeners for sliders, inputs, and buttons.
          */
         addEventListeners() {
-            const addSliderListener = (slider) => {
-                if (slider) {
+            // Helper function to add event listeners to sliders and their corresponding inputs
+            const addJointControlListeners = (slider, input) => {
+                if (slider && input) {
                     slider.addEventListener('input', this.handleSliderInput);
+                    input.addEventListener('change', this.handleJointInput);
                 }
             };
-
-            addSliderListener(this.joint1Slider);
-            addSliderListener(this.joint2Slider);
-            addSliderListener(this.joint3Slider);
-            addSliderListener(this.joint4Slider);
-            addSliderListener(this.joint5Slider);
-            addSliderListener(this.joint6Slider);
-
+            
+            addJointControlListeners(this.joint1Slider, this.joint1Input);
+            addJointControlListeners(this.joint2Slider, this.joint2Input);
+            addJointControlListeners(this.joint3Slider, this.joint3Input);
+            addJointControlListeners(this.joint4Slider, this.joint4Input);
+            addJointControlListeners(this.joint5Slider, this.joint5Input);
+            addJointControlListeners(this.joint6Slider, this.joint6Input);
+            
             window.addEventListener('resize', this.boundResizeHandler);
 
             // Add event listener for the new mode switch button
@@ -227,86 +275,204 @@
                     this.publishPoseCommand(parseFloat(this.poseXDisplay.textContent), parseFloat(this.poseYDisplay.textContent), currentZ - 0.01);
                 });
             }
+
+            // NEW: Add event listeners for the storage toggles
+            if (this.regolithStorageToggle) {
+                this.regolithStorageToggle.addEventListener('change', () => {
+                    this.publishBooleanMessage(this.regolithStorageTopic, this.regolithStorageToggle.checked);
+                });
+            }
+            if (this.rockStorageToggle) {
+                this.rockStorageToggle.addEventListener('change', () => {
+                    this.publishBooleanMessage(this.rockStorageTopic, this.rockStorageToggle.checked);
+                });
+            }
+        }
+        
+        /**
+         * Handles the input event for the number input boxes.
+         * Updates the corresponding slider and triggers the joint command.
+         */
+        handleJointInput(event) {
+            const inputElement = event.target;
+            const jointNumber = inputElement.id.replace('joint', '').replace('Input', '');
+            const slider = this.element.querySelector(`#joint${jointNumber}Slider`);
+            const value = parseFloat(inputElement.value);
+
+            // Ensure the value is within the slider's range
+            const clampedValue = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), value));
+            
+            // Update the slider's value to match the input
+            slider.value = clampedValue;
+            
+            // Now, trigger the same logic as the slider input
+            this.handleSliderInput({ target: slider });
         }
 
         /**
-         * Adds the event listeners for the preset buttons.
-         */
+ * Attaches event listeners to the preset buttons.
+ * This function is now much cleaner and easier to maintain by using an array of presets.
+ */
         addPresetButtonListeners() {
-            // Helper function to convert degrees to radians
-            const toRadians = (degrees) => degrees * (Math.PI / 180);
-            
-            if (this.presetButton1) {
-                this.presetButton1.addEventListener('click', () => this.publishJointCommand(
-                    0,
-                    54.97,
-                    59.00,
-                    3.00,
-                    96.00,
-                    0
-                ));
-                this.joint1Slider.value = 0.0.toFixed(2);
-                this.joint2Slider.value = 54.97.toFixed(2);
-                this.joint3Slider.value = 59.0.toFixed(2);
-                this.joint4Slider.value = 3.0.toFixed(2);
-                this.joint5Slider.value = 96.0.toFixed(2);
-                this.joint6Slider.value = 0.0.toFixed(2);
-                this.jointValues.joint1 = 0;
-                this.jointValues.joint2 = 54.97;
-                this.jointValues.joint3 = 59.0;
-                this.jointValues.joint4 = 3.0;
-                this.jointValues.joint5 = 96.0;
-                this.jointValues.joint6 = 0.0;
-                this.updateJointValueDisplays();
-            
-            }
-            if (this.presetButton2) {
-                this.presetButton2.addEventListener('click', () => this.publishJointCommand(
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0
-                ));
-                this.joint1Slider.value = 0.0.toFixed(2);
-                this.joint2Slider.value = 0.0.toFixed(2);
-                this.joint3Slider.value = 0.0.toFixed(2);
-                this.joint4Slider.value = 0.0.toFixed(2);
-                this.joint5Slider.value = 0.0.toFixed(2);
-                this.joint6Slider.value = 0.0.toFixed(2);
+            // Define an array of preset configurations.
+            // Each object contains the button ID and the corresponding joint values in degrees.
+            const presets = [
+                {
+                    id: 'presetButton1',
+                    values: {
+                        joint1: 0,
+                        joint2: 54.97,
+                        joint3: 59.00,
+                        joint4: 3.00,
+                        joint5: 96.00,
+                        joint6: 0
+                    }
+                },
+                {
+                    id: 'presetButton2',
+                    values: {
+                        joint1: 0.0,
+                        joint2: 0.0,
+                        joint3: 0.0,
+                        joint4: 0.0,
+                        joint5: 0.0,
+                        joint6: 0.0
+                    }
+                },
+                {
+                    id: 'presetButton3',
+                    values: {
+                        joint1: -156.33,
+                        joint2: 32.03,
+                        joint3: 57.65,
+                        joint4: -3.85,
+                        joint5: 0,
+                        joint6: 0
+                    }
+                }
+            ];
 
-                this.jointValues.joint1 = 0;
-                this.jointValues.joint2 = 0;
-                this.jointValues.joint3 = 0;
-                this.jointValues.joint4 = 0;
-                this.jointValues.joint5 = 0;
-                this.jointValues.joint6 = 0;
-                this.updateJointValueDisplays();
-            }
-            if (this.presetButton3) {
-                this.presetButton3.addEventListener('click', () => this.publishJointCommand(
-                    -156.33,
-                    32.03,
-                    57.65,
-                    -3.85,
-                    0,
-                    0
-                ));
-                this.joint1Slider.value = -156.33.toFixed(2);
-                this.joint2Slider.value = 32.03.toFixed(2);
-                this.joint3Slider.value = 57.65.toFixed(2);
-                this.joint4Slider.value = -3.85.toFixed(2);
-                this.joint5Slider.value = 0.00.toFixed(2);
-                this.joint6Slider.value = 0.00.toFixed(2);
+            // Loop through each preset to attach the event listener
+            presets.forEach(preset => {
+                const button = this.element.querySelector(`#${preset.id}`);
+                if (button) {
+                    button.addEventListener('click', () => {
+                        // When the button is clicked, first update the local jointValues object
+                        this.jointValues = { ...preset.values };
 
-                this.jointValues.joint1 = -156.33;
-                this.jointValues.joint2 = 32.03;
-                this.jointValues.joint3 = 57.65;
-                this.jointValues.joint4 = -3.85;
-                this.jointValues.joint5 = 0;
-                this.jointValues.joint6 = 0;
-                this.updateJointValueDisplays();
+                        // Then, update the UI elements (sliders and input boxes)
+                        // We use Object.keys to iterate over the joint values dynamically
+                        Object.keys(this.jointValues).forEach(joint => {
+                            // Update the slider's value
+                            const slider = this[`${joint}Slider`];
+                            if (slider) {
+                                slider.value = this.jointValues[joint];
+                            }
+
+                            // Update the input box's value
+                            const input = this[`${joint}Input`];
+                            if (input) {
+                                input.value = this.jointValues[joint].toFixed(2);
+                            }
+                        });
+
+                        // Publish the new joint command to ROS
+                        this.publishJointCommand(
+                            this.jointValues.joint1,
+                            this.jointValues.joint2,
+                            this.jointValues.joint3,
+                            this.jointValues.joint4,
+                            this.jointValues.joint5,
+                            this.jointValues.joint6
+                        );
+
+                        // Update the joint velocity displays on the UI
+                        this.updateJointValueDisplays();
+                    });
+                }
+            });
+        }
+
+        /**
+         * Adds keyboard event listeners to control sliders.
+         */
+        addKeyboardListeners() {
+            window.addEventListener('keydown', this.handleKeydown);
+        }
+
+        /**
+         * Handles keyboard keydown events to control sliders.
+         * @param {KeyboardEvent} event The keyboard event object.
+         */
+        handleKeydown(event) {
+            if (this.currentMode !== 'FK') {
+                return; // Only allow keyboard control in FK mode
+            }
+
+            const step = 1.0; // Amount to increment/decrement the slider
+            let sliderToUpdate = null;
+            let direction = 0;
+
+            switch (event.key) {
+                case 'q':
+                    sliderToUpdate = this.joint1Slider;
+                    direction = -1;
+                    break;
+                case 'w':
+                    sliderToUpdate = this.joint1Slider;
+                    direction = 1;
+                    break;
+                case 'a':
+                    sliderToUpdate = this.joint2Slider;
+                    direction = -1;
+                    break;
+                case 's':
+                    sliderToUpdate = this.joint2Slider;
+                    direction = 1;
+                    break;
+                case 'z':
+                    sliderToUpdate = this.joint3Slider;
+                    direction = -1;
+                    break;
+                case 'x':
+                    sliderToUpdate = this.joint3Slider;
+                    direction = 1;
+                    break;
+                case 'e':
+                    sliderToUpdate = this.joint4Slider;
+                    direction = -1;
+                    break;
+                case 'r':
+                    sliderToUpdate = this.joint4Slider;
+                    direction = 1;
+                    break;
+                case 'd':
+                    sliderToUpdate = this.joint5Slider;
+                    direction = -1;
+                    break;
+                case 'f':
+                    sliderToUpdate = this.joint5Slider;
+                    direction = 1;
+                    break;
+                case 'c':
+                    sliderToUpdate = this.joint6Slider;
+                    direction = -1;
+                    break;
+                case 'v':
+                    sliderToUpdate = this.joint6Slider;
+                    direction = 1;
+                    break;
+            }
+
+            if (sliderToUpdate) {
+                event.preventDefault(); // Prevent default browser actions
+                let newValue = parseFloat(sliderToUpdate.value) + (direction * step);
+
+                // Ensure the new value is within the slider's min/max range
+                newValue = Math.max(parseFloat(sliderToUpdate.min), Math.min(parseFloat(sliderToUpdate.max), newValue));
+                
+                sliderToUpdate.value = newValue;
+                this.handleSliderInput({ target: sliderToUpdate });
             }
         }
 
@@ -317,6 +483,15 @@
          * placeholder values for demonstration.
          */
         handleSliderInput(event) {
+            const slider = event.target;
+            const jointNumber = slider.id.replace('joint', '').replace('Slider', '');
+            const inputElement = this.element.querySelector(`#joint${jointNumber}Input`);
+            
+            // Update the corresponding input field in real-time
+            if (inputElement) {
+                inputElement.value = slider.value;
+            }
+
             if (this.currentMode === 'FK' && this.rosConnected) {
                 // Get the updated joint values from the sliders
                 const jointData = [
@@ -327,7 +502,7 @@
                     parseFloat(this.joint5Slider.value),
                     parseFloat(this.joint6Slider.value),
                 ];
-
+                
                 // TODO: Implement forward kinematics to calculate x, y, z from jointData.
                 // For now, we will publish a PoseStamped with placeholder values
                 // to match the requested message type.
@@ -378,14 +553,17 @@
          */
         updateUIState() {
             const sliders = [this.joint1Slider, this.joint2Slider, this.joint3Slider, this.joint4Slider, this.joint5Slider, this.joint6Slider];
+            // NEW: Include inputs in the update
+            const inputs = [this.joint1Input, this.joint2Input, this.joint3Input, this.joint4Input, this.joint5Input, this.joint6Input];
             const poseButtons = [this.poseXPlusButton, this.poseXMinusButton, this.poseYPlusButton, this.poseYMinusButton, this.poseZPlusButton, this.poseZMinusButton];
             const presetButtons = [this.presetButton1, this.presetButton2, this.presetButton3];
             
             if (this.currentMode === 'FK') {
                 this.modeSwitchButton.textContent = 'Switch to IK Mode';
 
-                // Enable sliders and preset buttons. Disable pose controls.
+                // Enable sliders, inputs, and preset buttons. Disable pose controls.
                 sliders.forEach(slider => slider.disabled = false);
+                inputs.forEach(input => input.disabled = false);
                 presetButtons.forEach(button => button.disabled = false);
                 poseButtons.forEach(button => button.disabled = true);
                 
@@ -396,8 +574,9 @@
             } else if (this.currentMode === 'IK') {
                 this.modeSwitchButton.textContent = 'Switch to FK Mode';
 
-                // Disable sliders and preset buttons. Enable pose controls.
+                // Disable sliders, inputs, and preset buttons. Enable pose controls.
                 sliders.forEach(slider => slider.disabled = true);
+                inputs.forEach(input => input.disabled = true);
                 presetButtons.forEach(button => button.disabled = true);
                 poseButtons.forEach(button => button.disabled = false);
                 
@@ -470,6 +649,24 @@
 
             this.jointCommandTopic.publish(poseMessage);
         }
+        
+        // NEW: This function publishes a boolean message to a specified topic
+        /**
+         * Publishes a boolean message to a specified topic.
+         * @param {ROSLIB.Topic} topic The ROSLIB.Topic object to publish to.
+         * @param {boolean} value The boolean value to publish.
+         */
+        publishBooleanMessage(topic, value) {
+            if (!this.rosConnected || !topic) {
+                console.warn('ROS is not connected or topic is not initialized.');
+                return;
+            }
+            const boolMessage = new window.ROSLIB.Message({
+                data: value
+            });
+            topic.publish(boolMessage);
+            console.log(`Published to ${topic.name}: ${value}`);
+        }
 
         /**
          * Handles incoming PoseStamped messages and updates the UI. (Used in FK mode).
@@ -487,50 +684,74 @@
          */
         handleJointStateUpdate(message) {
             if (this.currentMode === 'IK') {
-                // const sliders = [
-                //     this.joint1Slider, this.joint2Slider, this.joint3Slider,
-                //     this.joint4Slider, this.joint5Slider, this.joint6Slider
-                // ];
+                // The message.data format is incorrect for direct assignment in your current logic.
+                // Assuming it's the correct format for a moment, let's update both sliders and inputs.
+                const sliders = [
+                    this.joint1Slider, this.joint2Slider, this.joint3Slider,
+                    this.joint4Slider, this.joint5Slider, this.joint6Slider
+                ];
+                const inputs = [
+                    this.joint1Input, this.joint2Input, this.joint3Input,
+                    this.joint4Input, this.joint5Input, this.joint6Input
+                ];
 
-                // for (let i = 0; i < message.data.length && i < sliders.length; i++) {
-                //     // Convert radians to degrees for the UI display/slider values
-                //     const positionInDegrees = (message.data[i] * 180 / Math.PI).toFixed(1);
+                const values = [
+                    message.pose.position.x,
+                    message.pose.position.y,
+                    message.pose.position.z,
+                    message.pose.orientation.x,
+                    message.pose.orientation.y,
+                    message.pose.orientation.z
+                ];
 
-                //     if (sliders[i]) {
-                //         sliders[i].value = positionInDegrees;
-                //         this.jointValues[`joint${i+1}`] = parseFloat(positionInDegrees);
-                //     }
-                // }
-
-                this.joint1Slider.value = message.pose.position.x.toFixed(1);
-                this.joint2Slider.value = message.pose.position.y.toFixed(1);
-                this.joint3Slider.value = message.pose.position.z.toFixed(1);
-                this.joint4Slider.value = message.pose.orientation.x.toFixed(1);
-                this.joint5Slider.value = message.pose.orientation.y.toFixed(1);
-                this.joint6Slider.value = message.pose.orientation.z.toFixed(1);
-
-                this.jointValues[`joint${1}`] = parseFloat(this.joint1Slider.value);
-                this.jointValues[`joint${2}`] = parseFloat(this.joint2Slider.value);
-                this.jointValues[`joint${3}`] = parseFloat(this.joint3Slider.value);
-                this.jointValues[`joint${4}`] = parseFloat(this.joint4Slider.value);
-                this.jointValues[`joint${5}`] = parseFloat(this.joint5Slider.value);
-                this.jointValues[`joint${6}`] = parseFloat(this.joint6Slider.value);
+                for (let i = 0; i < values.length; i++) {
+                    const val = values[i].toFixed(1);
+                    if (sliders[i]) {
+                        sliders[i].value = val;
+                        this.jointValues[`joint${i+1}`] = parseFloat(val);
+                    }
+                    if (inputs[i]) {
+                        inputs[i].value = val;
+                    }
+                }
+                
                 this.updateJointValueDisplays();
+            }
+        }
+        
+        // NEW: Handles incoming Float64MultiArray messages and updates the UI displays
+        /**
+         * Handles incoming Float64MultiArray messages and updates the joint state display blocks.
+         * @param {ROSLIB.Message} message The incoming ROS message.
+         */
+        handleRobotJointState(message) {
+            // Ensure the data array has at least 6 elements
+            if (message.data && message.data.length >= 6) {
+                for (let i = 0; i < 6; i++) {
+                    const joint = `joint${i + 1}`;
+                    const displayElement = this.jointStateDisplay[joint];
+                    if (displayElement) {
+                        // Display the value with a fixed number of decimal places for readability
+                        displayElement.textContent = message.data[i].toFixed(2);
+                    }
+                }
+            } else {
+                console.warn("Received joint state message with unexpected data format or length.");
             }
         }
 
         /**
-         * Updates the displayed joint velocity values.
+         * Updates the displayed joint velocity values and the input boxes.
          */
         updateJointValueDisplays() {
             const formatVal = (val) => val.toFixed(1);
 
-            if (this.joint1VelSpan) this.joint1VelSpan.textContent = `J1: ${formatVal(this.jointValues.joint1)}`;
-            if (this.joint2VelSpan) this.joint2VelSpan.textContent = `J2: ${formatVal(this.jointValues.joint2)}`;
-            if (this.joint3VelSpan) this.joint3VelSpan.textContent = `J3: ${formatVal(this.jointValues.joint3)}`;
-            if (this.joint4VelSpan) this.joint4VelSpan.textContent = `J4: ${formatVal(this.jointValues.joint4)}`;
-            if (this.joint5VelSpan) this.joint5VelSpan.textContent = `J5: ${formatVal(this.jointValues.joint5)}`;
-            if (this.joint6VelSpan) this.joint6VelSpan.textContent = `J6: ${formatVal(this.jointValues.joint6)}`;
+            if (this.joint1VelSpan) this.joint1VelSpan.textContent = `J1: `;
+            if (this.joint2VelSpan) this.joint2VelSpan.textContent = `J2: `;
+            if (this.joint3VelSpan) this.joint3VelSpan.textContent = `J3: `;
+            if (this.joint4VelSpan) this.joint4VelSpan.textContent = `J4: `;
+            if (this.joint5VelSpan) this.joint5VelSpan.textContent = `J5: `;
+            if (this.joint6VelSpan) this.joint6VelSpan.textContent = `EE: `;
         }
 
         /**
@@ -587,6 +808,26 @@
                 name: '/camera/color/image_raw2/compressed',
                 messageType: 'sensor_msgs/CompressedImage'
             });
+
+            // NEW: Initialize topics for the storage toggles
+            this.regolithStorageTopic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/robot/regolith_storage',
+                messageType: 'std_msgs/Bool'
+            });
+
+            this.rockStorageTopic = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/robot/rock_storage',
+                messageType: 'std_msgs/Bool'
+            });
+            
+            // NEW: Initialize the joint state topic
+            this.jointStateListener = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/robot/joint_states',
+                messageType: 'std_msgs/Float64MultiArray'
+            });
         }
 
         /**
@@ -608,6 +849,9 @@
             // Subscribe to camera topics
             this.camera1Topic.subscribe(this.handleCamera1Message);
             this.camera2Topic.subscribe(this.handleCamera2Message);
+            
+            // NEW: Subscribe to the joint state topic
+            this.jointStateListener.subscribe(this.handleRobotJointState);
         }
 
         /**
@@ -637,6 +881,7 @@
             if (this.poseCommandTopic) { this.poseCommandTopic.unsubscribe(); }
             if (this.camera1Topic) { this.camera1Topic.unsubscribe(); }
             if (this.camera2Topic) { this.camera2Topic.unsubscribe(); }
+            if (this.jointStateListener) { this.jointStateListener.unsubscribe(); }
 
             // Reset all joint values to zero on disconnect
             this.jointValues = {
@@ -661,6 +906,11 @@
             if (this.poseCommandTopic) { this.poseCommandTopic.unsubscribe(); }
             if (this.camera1Topic) { this.camera1Topic.unsubscribe(); }
             if (this.camera2Topic) { this.camera2Topic.unsubscribe(); }
+            // NEW: Unsubscribe from the storage topics
+            if (this.regolithStorageTopic) { this.regolithStorageTopic.unsubscribe(); }
+            if (this.rockStorageTopic) { this.rockStorageTopic.unsubscribe(); }
+            // NEW: Unsubscribe from the joint state topic
+            if (this.jointStateListener) { this.jointStateListener.unsubscribe(); }
 
             if (this.ros) {
                 this.ros.off('connection', this.handleRosConnection);
