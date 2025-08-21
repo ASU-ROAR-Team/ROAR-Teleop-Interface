@@ -320,12 +320,12 @@
                 {
                     id: 'presetButton1',
                     values: {
-                        joint1: 0,
-                        joint2: 54.97,
-                        joint3: 59.00,
-                        joint4: 3.00,
-                        joint5: 96.00,
-                        joint6: 0
+                        joint1: 16.530,
+                        joint2: 155.352,
+                        joint3: 117.668,
+                        joint4: 177.966,
+                        joint5: -17.504,
+                        joint6: 0.000
                     }
                 },
                 {
@@ -342,12 +342,12 @@
                 {
                     id: 'presetButton3',
                     values: {
-                        joint1: -156.33,
-                        joint2: 32.03,
-                        joint3: 57.65,
-                        joint4: -3.85,
-                        joint5: 0,
-                        joint6: 0
+                        joint1: -106.003,
+                        joint2: 112.323,
+                        joint3: 181.851,
+                        joint4: 179.909,
+                        joint5: -17.504,
+                        joint6: 0.0
                     }
                 }
             ];
