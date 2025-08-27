@@ -47,6 +47,15 @@
             this.poseYMinusButton = null;
             this.poseZPlusButton = null;
             this.poseZMinusButton = null;
+            this.poseRollDisplay = null;
+            this.posePitchDisplay = null;
+            this.poseYawDisplay = null;
+            this.poseRollPlusButton = null;
+            this.poseRollMinusButton = null;
+            this.posePitchPlusButton = null;
+            this.posePitchMinusButton = null;
+            this.poseYawPlusButton = null;
+            this.poseYawMinusButton = null;
             this.presetButton1 = null;
             this.presetButton2 = null;
             this.presetButton3 = null;
@@ -187,6 +196,15 @@
             this.poseYMinusButton = this.element.querySelector('#poseY-minus');
             this.poseZPlusButton = this.element.querySelector('#poseZ-plus');
             this.poseZMinusButton = this.element.querySelector('#poseZ-minus');
+            this.poseRollDisplay = this.element.querySelector('#poseRoll');
+            this.posePitchDisplay = this.element.querySelector('#posePitch');
+            this.poseYawDisplay = this.element.querySelector('#poseYaw');
+            this.poseRollPlusButton = this.element.querySelector('#poseRoll-plus');
+            this.poseRollMinusButton = this.element.querySelector('#poseRoll-minus');
+            this.posePitchPlusButton = this.element.querySelector('#posePitch-plus');
+            this.posePitchMinusButton = this.element.querySelector('#posePitch-minus');
+            this.poseYawPlusButton = this.element.querySelector('#poseYaw-plus');
+            this.poseYawMinusButton = this.element.querySelector('#poseYaw-minus');
             this.presetButton1 = this.element.querySelector('#presetButton1');
             this.presetButton2 = this.element.querySelector('#presetButton2');
             this.presetButton3 = this.element.querySelector('#presetButton3');
@@ -273,6 +291,90 @@
                 this.poseZMinusButton.addEventListener('click', () => {
                     const currentZ = parseFloat(this.poseZDisplay.textContent);
                     this.publishPoseCommand(parseFloat(this.poseXDisplay.textContent), parseFloat(this.poseYDisplay.textContent), currentZ - 0.01);
+                });
+            }
+
+            // NEW: Add event listeners for Roll control buttons
+            if (this.poseRollPlusButton) {
+                this.poseRollPlusButton.addEventListener('click', () => {
+                    const currentRoll = parseFloat(this.poseRollDisplay.textContent);
+                    this.publishPoseCommand(
+                        parseFloat(this.poseXDisplay.textContent),
+                        parseFloat(this.poseYDisplay.textContent),
+                        parseFloat(this.poseZDisplay.textContent),
+                        currentRoll + 0.01,
+                        parseFloat(this.posePitchDisplay.textContent),
+                        parseFloat(this.poseYawDisplay.textContent)
+                    );
+                });
+            }
+            if (this.poseRollMinusButton) {
+                this.poseRollMinusButton.addEventListener('click', () => {
+                    const currentRoll = parseFloat(this.poseRollDisplay.textContent);
+                    this.publishPoseCommand(
+                        parseFloat(this.poseXDisplay.textContent),
+                        parseFloat(this.poseYDisplay.textContent),
+                        parseFloat(this.poseZDisplay.textContent),
+                        currentRoll - 0.01,
+                        parseFloat(this.posePitchDisplay.textContent),
+                        parseFloat(this.poseYawDisplay.textContent)
+                    );
+                });
+            }
+
+            // NEW: Add event listeners for Pitch control buttons
+            if (this.posePitchPlusButton) {
+                this.posePitchPlusButton.addEventListener('click', () => {
+                    const currentPitch = parseFloat(this.posePitchDisplay.textContent);
+                    this.publishPoseCommand(
+                        parseFloat(this.poseXDisplay.textContent),
+                        parseFloat(this.poseYDisplay.textContent),
+                        parseFloat(this.poseZDisplay.textContent),
+                        parseFloat(this.poseRollDisplay.textContent),
+                        currentPitch + 0.01,
+                        parseFloat(this.poseYawDisplay.textContent)
+                    );
+                });
+            }
+            if (this.posePitchMinusButton) {
+                this.posePitchMinusButton.addEventListener('click', () => {
+                    const currentPitch = parseFloat(this.posePitchDisplay.textContent);
+                    this.publishPoseCommand(
+                        parseFloat(this.poseXDisplay.textContent),
+                        parseFloat(this.poseYDisplay.textContent),
+                        parseFloat(this.poseZDisplay.textContent),
+                        parseFloat(this.poseRollDisplay.textContent),
+                        currentPitch - 0.01,
+                        parseFloat(this.poseYawDisplay.textContent)
+                    );
+                });
+            }
+
+            // NEW: Add event listeners for Yaw control buttons
+            if (this.poseYawPlusButton) {
+                this.poseYawPlusButton.addEventListener('click', () => {
+                    const currentYaw = parseFloat(this.poseYawDisplay.textContent);
+                    this.publishPoseCommand(
+                        parseFloat(this.poseXDisplay.textContent),
+                        parseFloat(this.poseYDisplay.textContent),
+                        parseFloat(this.poseZDisplay.textContent),
+                        parseFloat(this.poseRollDisplay.textContent),
+                        parseFloat(this.posePitchDisplay.textContent),
+                        currentYaw + 0.01
+                    );
+                });
+            }
+            if (this.poseYawMinusButton) {
+                this.poseYawMinusButton.addEventListener('click', () => {
+                    const currentYaw = parseFloat(this.poseYawDisplay.textContent);
+                    this.publishPoseCommand(
+                        parseFloat(this.poseXDisplay.textContent),
+                        parseFloat(this.poseYDisplay.textContent),
+                        parseFloat(this.poseZDisplay.textContent),
+                        parseFloat(this.poseRollDisplay.textContent),
+                        parseFloat(this.posePitchDisplay.textContent),
+                        currentYaw - 0.01
+                    );
                 });
             }
 
@@ -555,7 +657,7 @@
             const sliders = [this.joint1Slider, this.joint2Slider, this.joint3Slider, this.joint4Slider, this.joint5Slider, this.joint6Slider];
             // NEW: Include inputs in the update
             const inputs = [this.joint1Input, this.joint2Input, this.joint3Input, this.joint4Input, this.joint5Input, this.joint6Input];
-            const poseButtons = [this.poseXPlusButton, this.poseXMinusButton, this.poseYPlusButton, this.poseYMinusButton, this.poseZPlusButton, this.poseZMinusButton];
+            const poseButtons = [this.poseXPlusButton, this.poseXMinusButton, this.poseYPlusButton, this.poseYMinusButton, this.poseZPlusButton, this.poseZMinusButton,this.poseRollPlusButton, this.poseRollMinusButton,this.posePitchPlusButton, this.posePitchMinusButton,this.poseYawPlusButton, this.poseYawMinusButton];
             const presetButtons = [this.presetButton1, this.presetButton2, this.presetButton3];
             
             if (this.currentMode === 'FK') {
@@ -588,25 +690,47 @@
 
         /**
          * Publishes a new pose command.
+         * The orientation is sent as Euler angles (Roll, Pitch, Yaw) packed into the
+         * x, y, and z fields of the orientation component.
          */
-        publishPoseCommand(x, y, z) {
+        publishPoseCommand(x, y, z, roll, pitch, yaw) {
             if (!this.rosConnected || !this.poseCommandTopic || this.currentMode !== 'IK') {
                 return;
             }
-
+            // Create the PoseStamped message
             const poseMessage = new ROSLIB.Message({
-                header: { stamp: { sec: Date.now() / 1000, nanosec: 0 } },
+                header: {
+                    stamp: {
+                        sec: Math.floor(Date.now() / 1000),
+                        nanosec: 0
+                    }
+                },
                 pose: {
-                    position: { x: x, y: y, z: z },
-                    orientation: { x: 0, y: 0, z: 0, w: 1 }
+                    position: {
+                        x: x,
+                        y: y,
+                        z: z
+                    },
+                    // Pack Roll, Pitch, Yaw directly into the orientation fields.
+                    // The 'w' component can be set to 0 as it's likely unused by the backend.
+                    orientation: {
+                        x: roll,
+                        y: pitch,
+                        z: yaw,
+                        w: 0.0
+                    }
                 }
             });
+            // Publish the message to the topic
             this.poseCommandTopic.publish(poseMessage);
 
-            // Update the display immediately in IK mode
+            // Update the UI display immediately
             if (this.poseXDisplay) this.poseXDisplay.textContent = x.toFixed(2);
             if (this.poseYDisplay) this.poseYDisplay.textContent = y.toFixed(2);
             if (this.poseZDisplay) this.poseZDisplay.textContent = z.toFixed(2);
+            if (this.poseRollDisplay) this.poseRollDisplay.textContent = roll.toFixed(2);
+            if (this.posePitchDisplay) this.posePitchDisplay.textContent = pitch.toFixed(2);
+            if (this.poseYawDisplay) this.poseYawDisplay.textContent = yaw.toFixed(2);
         }
 
         /**
