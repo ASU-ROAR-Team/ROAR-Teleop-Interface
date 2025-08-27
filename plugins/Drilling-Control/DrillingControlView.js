@@ -9,7 +9,8 @@
 
             this.ros = null;
             this.rosConnected = false;
-            this.drillingManualInputPublisher = null; 
+            // CHANGE 1: Use a publisher for the full DrillingCommand message
+            this.drillingCommandPublisher = null; 
             this.drillingStatusSubscriber = null;
             this.fsmStateSubscriber = null;
             this.roverStatusSubscriber = null;
@@ -23,9 +24,12 @@
 
             this.platformUpButton = null;
             this.platformDownButton = null;
-            this.augerToggleSwitch = null; // New: Reference for auger switch
-            this.gateToggleSwitch = null; // New: Reference for gate switch
+            this.augerToggleSwitch = null; 
+            this.gateToggleSwitch = null; 
 
+            // CHANGE 2: Add a state variable to hold the last known height
+            this.last_known_height = 0.0;
+            
             this.currentManualInputState = {
                 manual_up: false,
                 manual_down: false,
@@ -270,7 +274,6 @@
             addMomentaryListener(this.platformUpButton, 'manual_up', true);
             addMomentaryListener(this.platformDownButton, 'manual_down', true);
 
-            // New: Add change listeners for switches
             if (this.augerToggleSwitch) {
                 this.augerToggleSwitch.addEventListener('change', () => {
                     this.handleSwitchChange('auger_on', this.augerToggleSwitch.checked);
@@ -290,52 +293,61 @@
             }
         }
         
-        // New: handle switch changes
         handleSwitchChange(commandType, value) {
+            // New logic: Check mission mode before changing state
             if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
-                // Revert the switch state if not in the correct mode
-                if (commandType === 'auger_on') {
-                    this.augerToggleSwitch.checked = !value;
-                } else if (commandType === 'gate_open') {
-                    this.gateToggleSwitch.checked = !value;
-                }
+                this.augerToggleSwitch.checked = this.currentManualInputState.auger_on;
+                this.gateToggleSwitch.checked = this.currentManualInputState.gate_open;
                 if (this.openmct && this.openmct.notifications) {
                     this.openmct.notifications.warn('Manual controls are disabled outside of Teleoperation mode.');
                 }
                 return;
             }
             this.currentManualInputState[commandType] = value;
-            this.sendDrillingManualInput(this.currentManualInputState);
+            this.publishDrillingCommand();
         }
 
-        sendDrillingManualInput(inputState) {
+        // CHANGE 3: The key new function to publish the complete command message
+        publishDrillingCommand() {
             if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
-                console.warn('Not in Teleoperation mode. Manual command not sent.');
+                console.warn('Not in Teleoperation mode. Command not sent.');
                 if (this.openmct && this.openmct.notifications) {
                     this.openmct.notifications.warn('Manual controls are disabled outside of Teleoperation mode.');
                 }
                 return;
             }
 
-            if (!this.rosConnected || !this.drillingManualInputPublisher) {
-                console.warn('ROS is not connected or manual input publisher is not initialized. Input not sent.');
+            if (!this.rosConnected || !this.drillingCommandPublisher) {
+                console.warn('ROS is not connected or command publisher is not initialized. Command not sent.');
                 return;
             }
 
             if (typeof ROSLIB === 'undefined' || typeof ROSLIB.Message === 'undefined') {
-                console.error('ROSLIB or ROSLIB.Message is not defined. Cannot send manual input.');
+                console.error('ROSLIB or ROSLIB.Message is not defined. Cannot send command.');
                 return;
             }
+            
+            let target_height = 0.0;
+            if (this.currentManualInputState.manual_up || this.currentManualInputState.manual_down) {
+                // Manual command is active, so we send a dummy target height.
+                // The Python node will override this with the last known height.
+                target_height = 0.0; 
+            } else {
+                // Manual command is inactive (button released), so send the last known height
+                // as the new target. This is the crucial part of the fix.
+                target_height = this.last_known_height;
+            }
 
-            const drillingManualInputMsg = new ROSLIB.Message({
-                manual_up: inputState.manual_up,
-                manual_down: inputState.manual_down,
-                auger_on: inputState.auger_on,
-                gate_open: inputState.gate_open
+            const drillingCommandMsg = new ROSLIB.Message({
+                target_height_cm: target_height,
+                manual_up: this.currentManualInputState.manual_up,
+                manual_down: this.currentManualInputState.manual_down,
+                auger_on: this.currentManualInputState.auger_on,
+                gate_open: this.currentManualInputState.gate_open
             });
 
-            this.drillingManualInputPublisher.publish(drillingManualInputMsg);
-            console.log("Published Drilling Manual Input:", drillingManualInputMsg);
+            this.drillingCommandPublisher.publish(drillingCommandMsg);
+            console.log("Published Drilling Command:", drillingCommandMsg);
         }
 
         handleManualButtonClick(commandType, value) {
@@ -351,7 +363,7 @@
                 this.currentManualInputState.manual_up = false;
             }
             
-            this.sendDrillingManualInput(this.currentManualInputState);
+            this.publishDrillingCommand();
         }
 
         connectToROS() {
@@ -366,10 +378,11 @@
             this.ros.on('error', this.handleRosError);
             this.ros.on('close', this.handleRosClose);
 
-            this.drillingManualInputPublisher = new window.ROSLIB.Topic({
+            // CHANGE 4: Use the new publisher for the full command message
+            this.drillingCommandPublisher = new window.ROSLIB.Topic({
                 ros: this.ros,
-                name: '/drilling/manual_input',
-                messageType: 'roar_msgs/DrillingManualInput'
+                name: '/drilling/command_to_actuators',
+                messageType: 'roar_msgs/DrillingCommand' // Use the correct message type
             });
 
             this.drillingStatusSubscriber = new window.ROSLIB.Topic({
@@ -394,8 +407,10 @@
             this.roverStatusSubscriber.subscribe(this.handleRoverStatus);
         }
 
+        // CHANGE 5: Store the last known height in the class instance
         handleDrillingStatus = (message) => {
-            const positiveHeight = Math.abs(message.current_height);
+            const positiveHeight =(message.current_height);
+            this.last_known_height = positiveHeight; // Store the height for later use
             if (this.platformDepthDisplay) {
                 this.platformDepthDisplay.textContent = positiveHeight.toFixed(1);
             }
@@ -419,7 +434,6 @@
             this.updateManualControlUIState();
         }
 
-        // New: Method to enable/disable manual control buttons and switches
         updateManualControlUIState = () => {
             const buttons = [
                 this.platformUpButton, this.platformDownButton,
@@ -504,8 +518,8 @@
 
             this.stopWebcam();
 
-            if (this.drillingManualInputPublisher) {
-                this.drillingManualInputPublisher.unadvertise();
+            if (this.drillingCommandPublisher) {
+                this.drillingCommandPublisher.unadvertise();
             }
             if (this.drillingStatusSubscriber) {
                 this.drillingStatusSubscriber.unsubscribe();
