@@ -66,13 +66,13 @@
       // Install all custom plugins
       openmct.install(window.StartComboPlugin());
       openmct.install(window.CostmapMapPlugin({
-          defaultCostmapSourceUrl: 'http://localhost:8000/costmap.png',
-          defaultPixelOffsetX: 208,
-          defaultPixelOffsetY: 761,
-          defaultPixelsPerMeter: 20.2,
-          checkpointsData: [[7.58, 10.874], [0.211, 9.454], [0.83, 19.867], [6.71, 19.515]],
-          landmarksData: [[-3.43, 9.67], [-0.66, 6.10], [4.96, 11.70], [5.29, 19.04], [13.22, 18.18], [17.54, 9.39], [4.14, 27.16], [11.43, 28.91], [-0.84, 22.44], [10.65, 7.25]],
-          finalGoalData: [11.5439, 17.2415]
+          defaultCostmapSourceUrl: 'http://localhost:8080/images/new_yard.png',
+          defaultPixelOffsetX: 70,
+          defaultPixelOffsetY: 246,
+          defaultPixelsPerMeter: 20,
+          checkpointsData: [[15.1159, -3.0854], [6.8073, 10.3746], [25.2349, 2.0235], [17.9612, 2.8924]],
+          landmarksData: [],
+          finalGoalData: [18.6625, 10.8159]
       }));
       openmct.install(window.CameraPlugin());
       openmct.install(window.ZEDPlugin());

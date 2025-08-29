@@ -45,6 +45,9 @@ window.CostmapMapPlugin = function CostmapMapPlugin(options) {
                 domainObject.pixelOffsetY = options?.defaultPixelOffsetY || 761; // Y offset in pixels (constant in your formula)
                 domainObject.pixelsPerMeter = options?.defaultPixelsPerMeter || 20.2; // Scaling factor (pixels per meter)
 
+                // Property for Start Point
+                domainObject.startPointData = options?.startPointData || [18.6625, 10.8159]; // Default to your specified start point
+
                 // Properties for Checkpoints and Final Goal
                 domainObject.checkpointsData = options?.checkpointsData || []; // Default to empty array
                 domainObject.finalGoalData = options?.finalGoalData || null; // Default to null for a single point
@@ -79,6 +82,14 @@ window.CostmapMapPlugin = function CostmapMapPlugin(options) {
                      name: 'Pixels Per Meter',
                      control: 'numberfield',
                      required: true,
+                     cssClass: 'l-input'
+                 },
+                 // Form field for Start Point
+                 {
+                     key: 'startPointData',
+                     name: 'Start Point (JSON array [x, y])',
+                     control: 'textfield',
+                     required: false,
                      cssClass: 'l-input'
                  },
                  // Form fields for Checkpoints and Final Goal
@@ -188,7 +199,8 @@ class CostmapMapComponent {
         this.lookaheadPoint = null; // {x, y}
         this.obstacles = new Map(); // Map<obstacle_id, {x, y, radius}>
 
-        // Checkpoints and Final Goal from properties (static, not cleared on ROS disconnect)
+        // Static points from properties
+        this.startPoint = this.processStartPointData(this.domainObject.startPointData);
         this.checkpoints = this.processCheckpointsData(this.domainObject.checkpointsData);
         this.finalGoal = this.processFinalGoalData(this.domainObject.finalGoalData);
         this.landmarks = this.processLandmarksData(this.domainObject.landmarksData);
@@ -212,6 +224,34 @@ class CostmapMapComponent {
     }
 
     // --- Methods to process data from properties (handling potential JSON strings) ---
+
+    // Method to process Start Point data
+    processStartPointData(data) {
+        let processedData = null;
+         if (typeof data === 'string') {
+             try {
+                 processedData = JSON.parse(data);
+             } catch (error) {
+                 console.error('Map: Error parsing start point JSON string:', error, data);
+                 return null;
+             }
+         } else if (Array.isArray(data) && data.length === 2 && typeof data[0] === 'number' && typeof data[1] === 'number') {
+              processedData = data;
+         } else if (data === null || data === undefined) {
+              return null;
+         }
+         else {
+             return null;
+         }
+
+         if (Array.isArray(processedData) && processedData.length === 2 && typeof processedData[0] === 'number' && typeof processedData[1] === 'number') {
+             return { x: processedData[0], y: processedData[1] };
+         } else {
+             console.warn('Map: Invalid start point data format after processing. Expected [x, y] array.', processedData);
+             return null;
+         }
+    }
+
     processCheckpointsData(data) {
         let processedData = [];
         if (typeof data === 'string') {
@@ -578,6 +618,24 @@ class CostmapMapComponent {
                  this.ctx.fill();
              });
         }
+        
+        // Draw Start Point
+        if (this.startPoint) {
+            const startPointPixel = {
+                x: this.realToPixelX(this.startPoint.x) * scaleX,
+                y: this.realToPixelY(this.startPoint.y) * scaleY
+            };
+            this.ctx.fillStyle = '#00FF00'; // Bright green
+            this.ctx.strokeStyle = 'black';
+            const baseRadius = 6;
+            const radius = Math.max(3, baseRadius * markerScale * 0.7);
+            this.ctx.lineWidth = Math.max(1, 2 * markerScale * 0.5);
+
+            this.ctx.beginPath();
+            this.ctx.arc(startPointPixel.x, startPointPixel.y, radius, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
+        }
 
         // Draw Checkpoints (from properties) - Re-introduced controlled scaling, but smaller
         if (Array.isArray(this.checkpoints) && this.checkpoints.length > 0) {
@@ -728,14 +786,14 @@ class CostmapMapComponent {
          }
 
          // --- Setup Subscribers for relevant ROS topics ---
-         // Robot Pose
+         // MODIFIED: Robot Pose subscriber
          this.robotPoseTopic = new ROSLIB.Topic({
              ros: this.ros,
-             name: '/gazebo/model_states', // Replace with your robot pose topic
-             messageType: 'gazebo_msgs/ModelStates' // Replace with your pose message type
+             name: '/filtered_state', // MODIFIED: Topic name
+             messageType: 'nav_msgs/Odometry' // MODIFIED: Message type
          });
          this.robotPoseTopic.subscribe(this.handleRobotPose.bind(this));
-         console.log('Map: Subscribed to /gazebo/model_states');
+         console.log('Map: Subscribed to /filtered_state');
 
 
          // Global Path
@@ -790,29 +848,31 @@ class CostmapMapComponent {
     }
 
     // --- ROS Message Handlers (update data and redraw) ---
+    // MODIFIED: handleRobotPose to process nav_msgs/Odometry
     handleRobotPose(msg) {
         const now = performance.now(); // Get current time for rate limiting and staleness tracking
 
-        // Rate limiting for drawing updates (only update this.lastProcessedPoseTime if we draw)
+        // Rate limiting for drawing updates
         if (now - this.lastProcessedPoseTime < this.minProcessingIntervalMs) {
             this.lastRobotPoseReceiveTime = now; // Always update receive time to prevent premature staleness
             return;
         }
-        this.lastProcessedPoseTime = now; // Update timestamp for drawing rate limiting
+        this.lastProcessedPoseTime = now;
 
         try {
-            const robotName = 'roar'; // Match your robot model name in Gazebo
-            const robotIndex = msg.name.indexOf(robotName);
-
-            if (robotIndex !== -1) {
-                const pose = msg.pose[robotIndex];
+            // Directly access pose data from the Odometry message
+            if (msg.pose && msg.pose.pose) {
+                const pose = msg.pose.pose;
                 const orientation = pose.orientation;
 
+                // Convert quaternion to Euler angles to get yaw (theta)
                 const q = new ROSLIB.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w);
                 let rpy = { x: 0, y: 0, z: 0 };
+                // Use a reliable method to convert quaternion to euler
                 if (typeof q.toEuler === 'function') {
                     rpy = q.toEuler();
                 } else {
+                    // Manual conversion as a fallback
                     const siny_cosp = 2 * (q.w * q.z + q.x * q.y);
                     const cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
                     rpy.z = Math.atan2(siny_cosp, cosy_cosp);
@@ -821,26 +881,22 @@ class CostmapMapComponent {
                 this.robotPosition = {
                     x: pose.position.x,
                     y: pose.position.y,
-                    theta: rpy.z
+                    theta: rpy.z // Yaw is the rotation around the Z-axis
                 };
-                this.lastRobotPoseReceiveTime = now; // IMPORTANT: Update receive time here
+                this.lastRobotPoseReceiveTime = now;
 
-                // drawMap() will be called by the animate() loop
             } else {
-                // If robot model is explicitly not found in a *received* message, clear it immediately
                 if (this.robotPosition !== null) {
                     this.robotPosition = null;
-                    this.lastRobotPoseReceiveTime = 0; // Reset timestamp, effectively making it stale
-                    // drawMap() will be called by the animate() loop
-                    console.warn(`Map: Robot model '${robotName}' not found in /gazebo/model_states message. Clearing robot display.`);
+                    this.lastRobotPoseReceiveTime = 0;
+                    console.warn(`Map: Received invalid Odometry message on /filtered_state. Clearing robot display.`);
                 }
             }
         } catch (error) {
             console.error('Map: Error processing robot pose message:', error);
             if (this.robotPosition !== null) {
                 this.robotPosition = null;
-                this.lastRobotPoseReceiveTime = 0; // Reset timestamp on error
-                // drawMap() will be called by the animate() loop
+                this.lastRobotPoseReceiveTime = 0;
             }
         }
     }
