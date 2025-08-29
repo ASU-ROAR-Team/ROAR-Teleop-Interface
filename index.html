@@ -84,39 +84,7 @@
       openmct.install(window.ThemeToggleObjectPlugin());
       
       openmct.start();
-	function captureZEDScreenshot() {
-        const zedCanvas = document.querySelector('canvas'); // adjust if needed
-        if (!zedCanvas) {
-            alert('ZED feed not found!');
-            return;
-        }
-
-        const dataURL = zedCanvas.toDataURL('image/png');
-
-        const link = document.createElement('a');
-        link.href = dataURL;
-        link.download = `zed_screenshot_${Date.now()}.png`;
-        link.click();
-    }
-
-    // --- Button for screenshots ---
-    const button = document.createElement('button');
-    button.innerText = 'Take ZED Screenshot';
-    button.style.position = 'fixed';
-    button.style.top = '10px';
-    button.style.right = '10px';
-    button.style.zIndex = '9999';
-    button.style.padding = '8px 12px';
-    button.style.backgroundColor = '#007BFF';
-    button.style.color = '#fff';
-    button.style.border = 'none';
-    button.style.borderRadius = '4px';
-    button.style.cursor = 'pointer';
-    button.onclick = captureZEDScreenshot;
-
-    document.body.appendChild(button);
     });
-
   </script>
   <style>
   </style>
