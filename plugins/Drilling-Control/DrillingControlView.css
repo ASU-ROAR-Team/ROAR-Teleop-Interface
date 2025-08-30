@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
 /* Main container for the entire drilling control interface */
 .drilling-control-container {
     display: flex;
@@ -141,7 +143,7 @@
 
 .drilling-control-button:active:not(:disabled) {
     transform: translateY(1px);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    box-shadow: 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .drilling-control-button:disabled {
@@ -271,7 +273,7 @@ input:checked + .drilling-slider:before {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-#drillingWebcamVideo {
+#drillingWebcamImage {
     position: absolute;
     top: 0;
     left: 0;
