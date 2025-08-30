@@ -169,11 +169,34 @@
         };
 
         takeWebcamSnapshot = () => {
-            if (this.openmct && this.openmct.notifications) {
-                this.openmct.notifications.info('Snapshot functionality is not implemented without canvas.');
+            if (!this.webcamVideoElement) {
+                console.warn('Webcam video element not found.');
+                if (this.openmct && this.openmct.notifications) {
+                    this.openmct.notifications.warn('Webcam feed not found.');
+                }
+                return;
             }
-            console.warn('Snapshot functionality is not implemented in this version.');
+
+            // Create a temporary canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = this.webcamVideoElement.videoWidth;
+            canvas.height = this.webcamVideoElement.videoHeight;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(this.webcamVideoElement, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas to data URL and trigger download
+            const dataURL = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'webcam_snapshot.png';
+            link.click();
+
+            if (this.openmct && this.openmct.notifications) {
+                this.openmct.notifications.info('Webcam snapshot taken!');
+            }
         };
+
 
         handleSnapshotButtonMouseDown = () => {
             if (this.webcamSnapshotButton) {
