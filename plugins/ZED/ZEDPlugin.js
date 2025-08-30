@@ -52,7 +52,9 @@ window.ZEDPlugin = function ZEDPlugin() {
                 let imageTopicSubscriber = null;
                 let errorMessageElement = null;
                 let viewContainerElement = null;
-                
+                let snapshotButton = null;
+                let innerCircle = null;
+
                 // Performance optimization flags
                 let isProcessingFrame = false;
                 let lastFrameTime = 0;
@@ -65,7 +67,7 @@ window.ZEDPlugin = function ZEDPlugin() {
                         errorMessageElement.parentElement.removeChild(errorMessageElement);
                         errorMessageElement = null;
                     }
-                    
+
                     // Hide image if message is an error/warning
                     if (imgElement) {
                         imgElement.style.display = (type === 'error' || type === 'warning') ? 'none' : 'block';
@@ -76,7 +78,7 @@ window.ZEDPlugin = function ZEDPlugin() {
                     errorMessageElement.style.marginTop = '20px';
                     errorMessageElement.style.padding = '10px';
                     errorMessageElement.style.borderRadius = '5px';
-                    
+
                     if (type === 'error') {
                         errorMessageElement.style.color = 'white';
                         errorMessageElement.style.backgroundColor = '#d9534f';
@@ -123,6 +125,11 @@ window.ZEDPlugin = function ZEDPlugin() {
                     lastFrameTime = 0;
                     frameCount = 0;
                     startTime = Date.now();
+                    
+                    if (snapshotButton) {
+                        snapshotButton.style.display = 'none';
+                    }
+
 
                     if (!rosbridgeUrl || !rosImageTopic) {
                         displayMessage('ZED Camera: ROSBridge URL or Image Topic not configured.', 'warning');
@@ -150,13 +157,13 @@ window.ZEDPlugin = function ZEDPlugin() {
 
                         imageTopicSubscriber.subscribe((message) => {
                             const frameStartTime = logTiming('Frame Received');
-                            
+
                             // Frame dropping - skip if we're still processing the last frame
                             if (isProcessingFrame) {
                                 console.log('ZED Plugin: Dropping frame - still processing previous frame');
                                 return;
                             }
-                            
+
                             // Additional frame rate limiting - ensure minimum time between frames
                             const timeSinceLastFrame = frameStartTime - lastFrameTime;
                             if (timeSinceLastFrame < throttleRate * 0.8) { // 80% of throttle rate as buffer
@@ -176,23 +183,24 @@ window.ZEDPlugin = function ZEDPlugin() {
 
                             try {
                                 let imageData = message.data;
-                                
+
                                 if (typeof imageData === 'string') {
                                     logTiming('String Processing Start');
-                                    
-                                    // OPTIMIZED: Direct base64 data URL - no blob creation bullshit
+
                                     const dataUrl = `data:image/jpeg;base64,${imageData}`;
-                                    
+
                                     logTiming('Data URL Created');
-                                    
+
                                     if (imgElement) {
                                         imgElement.src = dataUrl;
                                         imgElement.style.display = 'block';
+                                        if (snapshotButton) {
+                                            snapshotButton.style.display = 'block';
+                                        }
                                     }
-                                    
+
                                     logTiming('Image Element Updated');
-                                    
-                                    // Clear any previous error messages on successful frame
+
                                     if (errorMessageElement && errorMessageElement.parentElement) {
                                         errorMessageElement.parentElement.removeChild(errorMessageElement);
                                         errorMessageElement = null;
@@ -200,30 +208,31 @@ window.ZEDPlugin = function ZEDPlugin() {
 
                                 } else if (imageData instanceof ArrayBuffer || imageData instanceof Uint8Array) {
                                     logTiming('Binary Processing Start');
-                                    
-                                    // Convert binary to base64 and use data URL
+
                                     const bytes = new Uint8Array(imageData);
                                     let binaryString = '';
                                     const chunkSize = 1024;
-                                    
-                                    // Process in chunks to avoid call stack limits
+
                                     for (let i = 0; i < bytes.length; i += chunkSize) {
                                         const chunk = bytes.slice(i, i + chunkSize);
                                         binaryString += String.fromCharCode.apply(null, chunk);
                                     }
-                                    
+
                                     const base64 = btoa(binaryString);
                                     const dataUrl = `data:image/jpeg;base64,${base64}`;
-                                    
+
                                     logTiming('Binary to Base64 Conversion Complete');
-                                    
+
                                     if (imgElement) {
                                         imgElement.src = dataUrl;
                                         imgElement.style.display = 'block';
+                                        if (snapshotButton) {
+                                            snapshotButton.style.display = 'block';
+                                        }
                                     }
-                                    
+
                                     logTiming('Binary Image Element Updated');
-                                    
+
                                     if (errorMessageElement && errorMessageElement.parentElement) {
                                         errorMessageElement.parentElement.removeChild(errorMessageElement);
                                         errorMessageElement = null;
@@ -233,7 +242,7 @@ window.ZEDPlugin = function ZEDPlugin() {
                                     console.error('ZED Plugin: Unexpected image data format:', typeof imageData);
                                     displayMessage('ZED Camera: Unexpected image data format from ROSBridge.', 'error');
                                 }
-                                
+
                             } catch (error) {
                                 console.error('ZED Plugin: Error processing frame:', error);
                                 displayMessage('ZED Camera: Error processing image frame.', 'error');
@@ -257,17 +266,16 @@ window.ZEDPlugin = function ZEDPlugin() {
                     ros.on('close', (event) => {
                         console.log('ZED Plugin: ROSBridge closed:', event.code, event.reason);
                         isProcessingFrame = false;
-                        
+
                         if (!event.wasClean) {
                             displayMessage('ZED Camera: ROSBridge disconnected unexpectedly. Attempting to reconnect...', 'error');
-                            // Reconnect with exponential backoff
                             setTimeout(() => {
                                 connectAndSubscribe(domainObject.rosbridgeUrl, domainObject.rosImageTopic, domainObject.throttleRate);
-                            }, 5000); // Increased to 5 seconds
+                            }, 5000);
                         } else {
                             displayMessage('ZED Camera: Disconnected.', 'info');
                         }
-                        
+
                         if (imageTopicSubscriber) {
                             imageTopicSubscriber.unsubscribe();
                             imageTopicSubscriber = null;
@@ -276,32 +284,113 @@ window.ZEDPlugin = function ZEDPlugin() {
                             imgElement.src = '';
                             imgElement.style.display = 'none';
                         }
+                        if (snapshotButton) {
+                             snapshotButton.style.display = 'none';
+                        }
                     });
+                };
+
+                const takeSnapshot = () => {
+                    if (imgElement && imgElement.src) {
+                        try {
+                            // Create a temporary link element to trigger the download
+                            const link = document.createElement('a');
+                            link.href = imgElement.src;
+                            
+                            // Generate a filename
+                            const now = new Date();
+                            const timestamp = now.toISOString().replace(/[:.]/g, '-');
+                            const filename = `zed-camera-snapshot-${timestamp}.jpeg`;
+                            
+                            link.download = filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            
+                            console.log(`Screenshot saved: ${filename}`);
+                            openmct.notifications.info('Snapshot captured successfully!');
+                        } catch (error) {
+                            console.error('Error taking screenshot:', error);
+                            openmct.notifications.error('Snapshot failed: ' + error.message);
+                        }
+                    } else {
+                        console.warn('Cannot take screenshot: No image data available.');
+                        openmct.notifications.error('Snapshot failed: No image data available.');
+                    }
                 };
 
                 return {
                     show(element) {
                         viewContainerElement = element;
+                        
+                        const container = document.createElement('div');
+                        container.style.width = '100%';
+                        container.style.height = '100%';
+                        container.style.position = 'relative';
+
                         imgElement = document.createElement('img');
                         imgElement.style.width = '100%';
                         imgElement.style.height = '100%';
                         imgElement.style.objectFit = 'contain';
                         imgElement.style.display = 'none';
-                        
-                        // Add loading optimization
+
                         imgElement.loading = 'eager';
                         imgElement.decoding = 'async';
                         
-                        element.appendChild(imgElement);
+                        container.appendChild(imgElement);
 
-                        // Start connection when view is shown
+                        snapshotButton = document.createElement('button');
+                        snapshotButton.style.position = 'absolute';
+                        snapshotButton.style.bottom = '15px';
+                        snapshotButton.style.left = '50%';
+                        snapshotButton.style.transform = 'translateX(-50%)';
+                        snapshotButton.style.width = '60px';
+                        snapshotButton.style.height = '60px';
+                        snapshotButton.style.backgroundColor = 'transparent';
+                        snapshotButton.style.border = '2px solid white';
+                        snapshotButton.style.borderRadius = '50%';
+                        snapshotButton.style.cursor = 'pointer';
+                        snapshotButton.style.display = 'none';
+                        snapshotButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+                        snapshotButton.style.outline = 'none';
+                        
+                        snapshotButton.addEventListener('mousedown', () => {
+                            snapshotButton.style.transform = 'translateX(-50%) scale(0.95)';
+                            snapshotButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                        });
+                        snapshotButton.addEventListener('mouseup', () => {
+                            snapshotButton.style.transform = 'translateX(-50%) scale(1)';
+                            snapshotButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+                        });
+                        snapshotButton.addEventListener('mouseleave', () => {
+                            snapshotButton.style.transform = 'translateX(-50%) scale(1)';
+                            snapshotButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+                        });
+
+                        snapshotButton.addEventListener('click', takeSnapshot);
+                        container.appendChild(snapshotButton);
+
+                        innerCircle = document.createElement('div');
+                        innerCircle.style.width = '45px';
+                        innerCircle.style.height = '45px';
+                        innerCircle.style.backgroundColor = 'white';
+                        innerCircle.style.border = 'none';
+                        innerCircle.style.borderRadius = '50%';
+                        innerCircle.style.position = 'absolute';
+                        innerCircle.style.top = '50%';
+                        innerCircle.style.left = '50%';
+                        innerCircle.style.transform = 'translate(-50%, -50%)';
+                        innerCircle.style.boxSizing = 'border-box';
+                        snapshotButton.appendChild(innerCircle);
+                        
+                        element.appendChild(container);
+
                         logTiming('View Shown - Starting Connection');
                         connectAndSubscribe(domainObject.rosbridgeUrl, domainObject.rosImageTopic, domainObject.throttleRate);
                     },
-                    
+
                     onEditModeChange(editMode) {
                         if (editMode) {
-                            // Disconnect during edit mode
                             if (imageTopicSubscriber) {
                                 imageTopicSubscriber.unsubscribe();
                                 imageTopicSubscriber = null;
@@ -315,18 +404,34 @@ window.ZEDPlugin = function ZEDPlugin() {
                                 imgElement.src = '';
                                 imgElement.style.display = 'none';
                             }
+                            if (snapshotButton) {
+                                snapshotButton.style.display = 'none';
+                            }
                             displayMessage('ZED Camera: In edit mode. Stream paused.', 'info');
                         } else {
-                            // Reconnect when exiting edit mode
                             logTiming('Edit Mode Ended - Reconnecting');
                             connectAndSubscribe(domainObject.rosbridgeUrl, domainObject.rosImageTopic, domainObject.throttleRate);
                         }
                     },
-                    
+
                     destroy: function () {
                         console.log('ZED Plugin: Destroying view...');
                         
-                        // Clean up all resources
+                        if (snapshotButton) {
+                            snapshotButton.removeEventListener('click', takeSnapshot);
+                            snapshotButton.removeEventListener('mousedown', () => {});
+                            snapshotButton.removeEventListener('mouseup', () => {});
+                            snapshotButton.removeEventListener('mouseleave', () => {});
+                            if (snapshotButton.parentElement) {
+                                snapshotButton.parentElement.removeChild(snapshotButton);
+                            }
+                            snapshotButton = null;
+                        }
+                        if (innerCircle && innerCircle.parentElement) {
+                            innerCircle.parentElement.removeChild(innerCircle);
+                            innerCircle = null;
+                        }
+
                         if (imageTopicSubscriber) {
                             imageTopicSubscriber.unsubscribe();
                             imageTopicSubscriber = null;
@@ -345,7 +450,7 @@ window.ZEDPlugin = function ZEDPlugin() {
                         errorMessageElement = null;
                         viewContainerElement = null;
                         isProcessingFrame = false;
-                        
+
                         console.log('ZED Camera View destroyed.');
                     }
                 };

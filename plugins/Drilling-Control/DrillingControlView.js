@@ -9,12 +9,12 @@
 
             this.ros = null;
             this.rosConnected = false;
-            // CHANGE 1: Use a publisher for the full DrillingCommand message
             this.drillingCommandPublisher = null; 
             this.drillingStatusSubscriber = null;
             this.fsmStateSubscriber = null;
             this.roverStatusSubscriber = null;
             this.currentRoverState = { rover_state: 'IDLE', active_mission: '' };
+            this.webcamSubscriber = null;
 
             this.rosStatusDot = null;
             this.rosStatus = null;
@@ -27,7 +27,6 @@
             this.augerToggleSwitch = null; 
             this.gateToggleSwitch = null; 
 
-            // CHANGE 2: Add a state variable to hold the last known height
             this.last_known_height = 0.0;
             
             this.currentManualInputState = {
@@ -37,8 +36,7 @@
                 gate_open: false
             };
 
-            this.webcamVideoElement = null;
-            this.webcamMediaStream = null;
+            this.webcamImageElement = null; 
             this.webcamStatusMessageElement = null;
             this.webcamSnapshotButton = null;
             this.webcamInnerSnapshotCircle = null;
@@ -56,6 +54,7 @@
                 this.rosStatusDot.classList.remove('error');
                 this.rosStatusDot.classList.add('connected');
             }
+            this.startRosWebcam();
         };
 
         handleRosError = (error) => {
@@ -70,6 +69,7 @@
                 this.rosStatusDot.classList.remove('connected');
                 this.rosStatusDot.classList.add('error');
             }
+            this.stopRosWebcam();
         };
 
         handleRosClose = () => {
@@ -84,6 +84,7 @@
                 this.rosStatusDot.classList.remove('connected');
                 this.rosStatusDot.classList.add('error');
             }
+            this.stopRosWebcam();
             setTimeout(() => {
                 console.log('Attempting to reconnect to ROS...');
                 this.connectToROS();
@@ -92,10 +93,10 @@
 
         handleEditModeChange = (isEditing) => {
             if (isEditing) {
-                this.stopWebcam();
+                this.stopRosWebcam();
                 this.displayWebcamStatus('Webcam: In edit mode. Stream paused.', 'info');
             } else {
-                this.startWebcam();
+                this.startRosWebcam();
             }
         };
         
@@ -115,52 +116,54 @@
                 this.webcamStatusMessageElement.style.display = 'none';
             }
         };
-
-        startWebcam = async () => {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                this.displayWebcamStatus('Webcam not supported by this browser.', 'error');
-                console.error('Webcam not supported by this browser.');
+        
+        startRosWebcam = () => {
+            if (!this.rosConnected) {
+                this.displayWebcamStatus('Waiting for ROS connection...', 'info');
                 return;
             }
-
-            if (!this.webcamVideoElement) {
-                this.displayWebcamStatus('Webcam display element not found. Please ensure HTML is correct.', 'error');
-                console.error('Webcam video element is null when startWebcam is called.');
+            if (!this.webcamImageElement) {
+                this.displayWebcamStatus('Webcam display element not found.', 'error');
                 return;
             }
+            if (this.webcamSubscriber) {
+                console.log('Webcam subscriber already active.');
+                return;
+            }
+            
+            this.displayWebcamStatus('Connecting to ROS camera topic...', 'info');
+            
+            this.webcamSubscriber = new window.ROSLIB.Topic({
+                ros: this.ros,
+                name: '/logitech_1/image_raw/compressed', 
+                messageType: 'sensor_msgs/CompressedImage'
+            });
 
-            try {
-                this.displayWebcamStatus('Requesting webcam access...', 'info');
-                this.webcamMediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-                this.webcamVideoElement.srcObject = this.webcamMediaStream;
-                this.webcamVideoElement.play();
-                this.webcamVideoElement.style.display = 'block';
-                this.hideWebcamStatus();
-                if (this.webcamSnapshotButton) {
-                    this.webcamSnapshotButton.style.display = 'flex';
-                }
-                console.log('Webcam stream started.');
-            } catch (err) {
-                this.displayWebcamStatus('Failed to access webcam. Ensure it\'s connected and permissions are granted.', 'error');
-                console.error('Error accessing webcam:', err);
-                if (this.webcamVideoElement) {
-                    this.webcamVideoElement.style.display = 'none';
-                }
-                if (this.webcamSnapshotButton) {
-                    this.webcamSnapshotButton.style.display = 'none';
-                }
+            this.webcamSubscriber.subscribe(this.handleImageMessage.bind(this));
+            console.log('Subscribed to ROS camera topic.');
+        };
+
+        handleImageMessage = (message) => {
+            const imageUri = `data:image/jpeg;base64,${message.data}`;
+            if (this.webcamImageElement) {
+                this.webcamImageElement.src = imageUri;
+                this.webcamImageElement.style.display = 'block';
+            }
+            this.hideWebcamStatus();
+            if (this.webcamSnapshotButton) {
+                this.webcamSnapshotButton.style.display = 'flex';
             }
         };
 
-        stopWebcam = () => {
-            if (this.webcamMediaStream) {
-                this.webcamMediaStream.getTracks().forEach(track => track.stop());
-                this.webcamMediaStream = null;
-                if (this.webcamVideoElement) {
-                    this.webcamVideoElement.srcObject = null;
-                    this.webcamVideoElement.style.display = 'none';
-                }
-                console.log('Webcam stream stopped.');
+        stopRosWebcam = () => {
+            if (this.webcamSubscriber) {
+                this.webcamSubscriber.unsubscribe();
+                this.webcamSubscriber = null;
+                console.log('Unsubscribed from ROS camera topic.');
+            }
+            if (this.webcamImageElement) {
+                this.webcamImageElement.src = '';
+                this.webcamImageElement.style.display = 'none';
             }
             if (this.webcamSnapshotButton) {
                 this.webcamSnapshotButton.style.display = 'none';
@@ -169,27 +172,17 @@
         };
 
         takeWebcamSnapshot = () => {
-            if (!this.webcamVideoElement) {
-                console.warn('Webcam video element not found.');
+            if (!this.webcamImageElement || !this.webcamImageElement.src) {
+                console.warn('Webcam image not found or not loaded.');
                 if (this.openmct && this.openmct.notifications) {
                     this.openmct.notifications.warn('Webcam feed not found.');
                 }
                 return;
             }
-
-            // Create a temporary canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = this.webcamVideoElement.videoWidth;
-            canvas.height = this.webcamVideoElement.videoHeight;
-
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(this.webcamVideoElement, 0, 0, canvas.width, canvas.height);
-
-            // Convert canvas to data URL and trigger download
-            const dataURL = canvas.toDataURL('image/png');
+            
             const link = document.createElement('a');
-            link.href = dataURL;
-            link.download = 'webcam_snapshot.png';
+            link.href = this.webcamImageElement.src;
+            link.download = 'webcam_snapshot.jpg';
             link.click();
 
             if (this.openmct && this.openmct.notifications) {
@@ -258,13 +251,13 @@
 
             const webcamContainer = this.element.querySelector('#drillingWebcamContainer');
             if (webcamContainer) {
-                this.webcamVideoElement = webcamContainer.querySelector('#drillingWebcamVideo');
+                this.webcamImageElement = webcamContainer.querySelector('#drillingWebcamImage');
                 this.webcamSnapshotButton = webcamContainer.querySelector('#drillingSnapshotButton');
                 this.webcamInnerSnapshotCircle = this.webcamSnapshotButton.querySelector('.drilling-snapshot-inner-circle');
                 this.webcamStatusMessageElement = webcamContainer.querySelector('#drillingWebcamStatusMessage');
 
-                if (this.webcamVideoElement) {
-                    this.webcamVideoElement.style.display = 'none';
+                if (this.webcamImageElement) {
+                    this.webcamImageElement.style.display = 'none';
                 }
                 if (this.webcamSnapshotButton) {
                     this.webcamSnapshotButton.style.display = 'none';
@@ -282,7 +275,6 @@
             }
 
             this.addEventListeners();
-            this.startWebcam();
             this.updateManualControlUIState();
         }
 
@@ -317,7 +309,6 @@
         }
         
         handleSwitchChange(commandType, value) {
-            // New logic: Check mission mode before changing state
             if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
                 this.augerToggleSwitch.checked = this.currentManualInputState.auger_on;
                 this.gateToggleSwitch.checked = this.currentManualInputState.gate_open;
@@ -330,7 +321,6 @@
             this.publishDrillingCommand();
         }
 
-        // CHANGE 3: The key new function to publish the complete command message
         publishDrillingCommand() {
             if (this.currentRoverState.active_mission.toLowerCase() !== 'teleoperation') {
                 console.warn('Not in Teleoperation mode. Command not sent.');
@@ -352,12 +342,8 @@
             
             let target_height = 0.0;
             if (this.currentManualInputState.manual_up || this.currentManualInputState.manual_down) {
-                // Manual command is active, so we send a dummy target height.
-                // The Python node will override this with the last known height.
                 target_height = 0.0; 
             } else {
-                // Manual command is inactive (button released), so send the last known height
-                // as the new target. This is the crucial part of the fix.
                 target_height = this.last_known_height;
             }
 
@@ -401,11 +387,10 @@
             this.ros.on('error', this.handleRosError);
             this.ros.on('close', this.handleRosClose);
 
-            // CHANGE 4: Use the new publisher for the full command message
             this.drillingCommandPublisher = new window.ROSLIB.Topic({
                 ros: this.ros,
                 name: '/drilling/command_to_actuators',
-                messageType: 'roar_msgs/DrillingCommand' // Use the correct message type
+                messageType: 'roar_msgs/DrillingCommand'
             });
 
             this.drillingStatusSubscriber = new window.ROSLIB.Topic({
@@ -430,10 +415,9 @@
             this.roverStatusSubscriber.subscribe(this.handleRoverStatus);
         }
 
-        // CHANGE 5: Store the last known height in the class instance
         handleDrillingStatus = (message) => {
             const positiveHeight =(message.current_height);
-            this.last_known_height = positiveHeight; // Store the height for later use
+            this.last_known_height = positiveHeight;
             if (this.platformDepthDisplay) {
                 this.platformDepthDisplay.textContent = positiveHeight.toFixed(1);
             }
@@ -539,7 +523,7 @@
                 this.webcamSnapshotButton.removeEventListener('mouseleave', this.handleSnapshotButtonMouseLeave);
             }
 
-            this.stopWebcam();
+            this.stopRosWebcam();
 
             if (this.drillingCommandPublisher) {
                 this.drillingCommandPublisher.unadvertise();
@@ -552,6 +536,10 @@
             }
             if (this.roverStatusSubscriber) {
                 this.roverStatusSubscriber.unsubscribe();
+            }
+            
+            if (this.webcamSubscriber) {
+                this.webcamSubscriber.unsubscribe();
             }
 
             if (this.ros && this.ros.isConnected) {
@@ -569,8 +557,7 @@
             this.platformDownButton = null;
             this.augerToggleSwitch = null;
             this.gateToggleSwitch = null;
-            this.webcamVideoElement = null;
-            this.webcamMediaStream = null;
+            this.webcamImageElement = null;
             this.webcamStatusMessageElement = null;
             this.webcamSnapshotButton = null;
             this.webcamInnerSnapshotCircle = null;
@@ -583,6 +570,7 @@
             this.openmct = null;
             this.currentRoverState = null;
             this.roverStatusSubscriber = null;
+            this.webcamSubscriber = null;
 
             this.element.innerHTML = '';
         }
